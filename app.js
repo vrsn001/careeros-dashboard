@@ -135,7 +135,9 @@ const STATUS_COLORS = {
 // ── INIT ────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
-    lucide.createIcons();
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
 
     // Landing Page Flow
     if (document.body.classList.contains('landing-page')) {
