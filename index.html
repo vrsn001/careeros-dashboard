@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CareerOS — Career Intelligence Dashboard</title>
+  <meta name="description" content="Personal career analytics dashboard for job search, LinkedIn optimization, and professional growth tracking." />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Scanline Overlay -->
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="noise" aria-hidden="true"></div>
+
+  <!-- App Wrapper -->
+  <div class="app-layout">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-mark">
+          <span class="logo-icon">⬡</span>
+          <div class="logo-text">
+            <span class="logo-name">CareerOS</span>
+            <span class="logo-sub">v2.6.1</span>
+          </div>
+        </div>
+        <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle Sidebar">
+          <i data-lucide="panel-left-close"></i>
+        </button>
+      </div>
+
+      <!-- Profile -->
+      <div class="profile-card">
+        <div class="avatar-wrapper">
+          <div class="avatar-ring"></div>
+          <div class="avatar" id="profileAvatar">AJ</div>
+          <span class="status-dot online"></span>
+        </div>
+        <div class="profile-info">
+          <h2 class="profile-name">Abhijit Jha</h2>
+          <p class="profile-role">Full Stack Engineer</p>
+          <div class="profile-tags">
+            <span class="tag tag-amber">Open to Work</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nav -->
+      <nav class="sidebar-nav" role="navigation">
+        <span class="nav-label">MODULES</span>
+        <a href="#overview" class="nav-item active" data-section="overview" id="nav-overview">
+          <i data-lucide="layout-dashboard"></i>
+          <span>Overview</span>
+          <span class="nav-badge">6</span>
+        </a>
+        <a href="#saved-jobs" class="nav-item" data-section="saved-jobs" id="nav-saved-jobs">
+          <i data-lucide="briefcase"></i>
+          <span>Saved Jobs</span>
+          <span class="nav-badge">18</span>
+        </a>
+        <a href="#bookmarks" class="nav-item" data-section="bookmarks" id="nav-bookmarks">
+          <i data-lucide="bookmark"></i>
+          <span>Bookmarks</span>
+          <span class="nav-badge">12</span>
+        </a>
+        <a href="#linkedin" class="nav-item" data-section="linkedin" id="nav-linkedin">
+          <i data-lucide="linkedin"></i>
+          <span>LinkedIn Score</span>
+        </a>
+        <a href="#analytics" class="nav-item" data-section="analytics" id="nav-analytics">
+          <i data-lucide="bar-chart-2"></i>
+          <span>Analytics</span>
+        </a>
+        <a href="#mindmap" class="nav-item" data-section="mindmap" id="nav-mindmap">
+          <i data-lucide="network"></i>
+          <span>Job Mind Map</span>
+        </a>
+      </nav>
+
+      <!-- Quick Stats -->
+      <div class="sidebar-stats">
+        <span class="nav-label">QUICK STATS</span>
+        <div class="stat-row">
+          <span class="stat-label">Response Rate</span>
+          <span class="stat-value cyan">34%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Active Apps</span>
+          <span class="stat-value amber">7</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Interviews</span>
+          <span class="stat-value emerald">3</span>
+        </div>
+        <div class="stat-bar-label">Weekly Goal</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width: 68%"></div>
+        </div>
+        <span class="stat-bar-text">17 / 25 applications</span>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="theme-toggle" id="themeToggle" aria-label="Toggle Theme">
+          <i data-lucide="sun"></i>
+          <span>Light Mode</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="main-content" id="mainContent">
+
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" id="mobileSidebarToggle" aria-label="Open menu">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="page-breadcrumb">
+            <span id="currentSection">Overview</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="search-global">
+            <i data-lucide="search"></i>
+            <input type="text" id="globalSearch" placeholder="search jobs, posts, companies..." autocomplete="off" />
+          </div>
+          <div class="topbar-datetime">
+            <span id="currentDate"></span>
+          </div>
+          <button class="notif-btn" aria-label="Notifications">
+            <i data-lucide="bell"></i>
+            <span class="notif-dot"></span>
+          </button>
+        </div>
+      </header>
+
+      <!-- ======== SECTION: OVERVIEW ======== -->
+      <section class="content-section active" id="overview">
+        <div class="section-header">
+          <h1 class="section-title">Dashboard Overview</h1>
+          <p class="section-subtitle font-mono">// career intelligence terminal — march 2026</p>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+          <div class="kpi-card kpi-cyan">
+            <div class="kpi-icon"><i data-lucide="send"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="53">0</span>
+              <span class="kpi-label">Applications Sent</span>
+            </div>
+            <div class="kpi-trend up">↑ 12% this week</div>
+          </div>
+          <div class="kpi-card kpi-amber">
+            <div class="kpi-icon"><i data-lucide="mail-open"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="18">0</span>
+              <span class="kpi-label">Responses Received</span>
+            </div>
+            <div class="kpi-trend up">↑ 5% this week</div>
+          </div>
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-icon"><i data-lucide="video"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="7">0</span>
+              <span class="kpi-label">Interviews Scheduled</span>
+            </div>
+            <div class="kpi-trend up">↑ 2 new</div>
+          </div>
+          <div class="kpi-card kpi-emerald">
+            <div class="kpi-icon"><i data-lucide="trophy"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="2">0</span>
+              <span class="kpi-label">Offers Received</span>
+            </div>
+            <div class="kpi-trend neutral">— pending decision</div>
+          </div>
+          <div class="kpi-card kpi-rose">
+            <div class="kpi-icon"><i data-lucide="bookmark-check"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="18">0</span>
+              <span class="kpi-label">Saved for Later</span>
+            </div>
+            <div class="kpi-trend neutral">— 5 expiring soon</div>
+          </div>
+          <div class="kpi-card kpi-indigo">
+            <div class="kpi-icon"><i data-lucide="star"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-number" data-count="82">0</span>
+              <span class="kpi-label">LinkedIn Score</span>
+            </div>
+            <div class="kpi-trend up">↑ 4pts this month</div>
+          </div>
+        </div>
+
+        <!-- Row: Activity Timeline + Top Companies -->
+        <div class="overview-row">
+          <div class="card card-lg">
+            <div class="card-header">
+              <h3 class="card-title">Recent Activity</h3>
+              <span class="card-badge font-mono">LIVE</span>
+            </div>
+            <div class="activity-feed" id="activityFeed"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">Top Target Companies</h3>
+            </div>
+            <div class="company-list" id="companyList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======== SECTION: SAVED JOBS ======== -->
+      <section class="content-section" id="saved-jobs">
+        <div class="section-header">
+          <h1 class="section-title">Saved Jobs</h1>
+          <p class="section-subtitle font-mono">// 18 positions tracked across 14 companies</p>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-bar">
+            <i data-lucide="search"></i>
+            <input type="text" id="jobSearch" placeholder="search by role, company, skill..." />
+          </div>
+          <div class="filter-pills" id="jobFilters">
+            <button class="filter-pill active" data-filter="all">ALL</button>
+            <button class="filter-pill" data-filter="saved">SAVED</button>
+            <button class="filter-pill" data-filter="applied">APPLIED</button>
+            <button class="filter-pill" data-filter="interview">INTERVIEW</button>
+            <button class="filter-pill" data-filter="offer">OFFER</button>
+            <button class="filter-pill" data-filter="rejected">REJECTED</button>
+          </div>
+          <div class="view-toggle">
+            <button class="view-btn active" id="gridViewBtn" aria-label="Grid view"><i data-lucide="layout-grid"></i></button>
+            <button class="view-btn" id="listViewBtn" aria-label="List view"><i data-lucide="list"></i></button>
+          </div>
+        </div>
+
+        <div class="jobs-grid" id="jobsGrid"></div>
+      </section>
+
+      <!-- ======== SECTION: BOOKMARKS ======== -->
+      <section class="content-section" id="bookmarks">
+        <div class="section-header">
+          <h1 class="section-title">Bookmarked Posts</h1>
+          <p class="section-subtitle font-mono">// curated reading list — 12 articles saved</p>
+        </div>
+
+        <div class="toolbar">
+          <div class="filter-pills" id="postFilters">
+            <button class="filter-pill active" data-filter="all">ALL</button>
+            <button class="filter-pill" data-filter="career">CAREER</button>
+            <button class="filter-pill" data-filter="tech">TECH</button>
+            <button class="filter-pill" data-filter="interview">INTERVIEW PREP</button>
+            <button class="filter-pill" data-filter="salary">SALARY</button>
+            <button class="filter-pill" data-filter="linkedin">LINKEDIN TIPS</button>
+          </div>
+        </div>
+
+        <div class="posts-grid" id="postsGrid"></div>
+      </section>
+
+      <!-- ======== SECTION: LINKEDIN SCORE ======== -->
+      <section class="content-section" id="linkedin">
+        <div class="section-header">
+          <h1 class="section-title">LinkedIn Profile Score</h1>
+          <p class="section-subtitle font-mono">// profile strength analysis — last updated march 2026</p>
+        </div>
+
+        <div class="linkedin-layout">
+          <!-- Score Gauge -->
+          <div class="card linkedin-score-card">
+            <div class="gauge-wrapper">
+              <canvas id="gaugeCanvas" width="260" height="260"></canvas>
+              <div class="gauge-center">
+                <span class="gauge-number" id="gaugeNumber">0</span>
+                <span class="gauge-label">Overall Score</span>
+                <span class="gauge-grade" id="gaugeGrade">—</span>
+              </div>
+            </div>
+            <div class="score-meta">
+              <div class="score-meta-item">
+                <span class="meta-label">Profile Views</span>
+                <span class="meta-value cyan">1,247</span>
+              </div>
+              <div class="score-meta-item">
+                <span class="meta-label">Search Appearances</span>
+                <span class="meta-value amber">3,891</span>
+              </div>
+              <div class="score-meta-item">
+                <span class="meta-label">Connections</span>
+                <span class="meta-value emerald">843</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Category Breakdown -->
+          <div class="linkedin-breakdown">
+            <div class="card breakdown-card">
+              <div class="card-header">
+                <h3 class="card-title">Score Breakdown</h3>
+              </div>
+              <div class="breakdown-list" id="linkedinBreakdown"></div>
+            </div>
+
+            <div class="card tips-card">
+              <div class="card-header">
+                <h3 class="card-title">Optimization Tips</h3>
+                <span class="card-badge card-badge-amber">3 actions</span>
+              </div>
+              <ul class="tips-list" id="linkedinTips"></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======== SECTION: ANALYTICS ======== -->
+      <section class="content-section" id="analytics">
+        <div class="section-header">
+          <h1 class="section-title">Career Analytics</h1>
+          <p class="section-subtitle font-mono">// data-driven job search insights</p>
+        </div>
+
+        <div class="analytics-grid">
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Application Funnel</h3>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="funnelChart"></canvas>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Weekly Activity</h3>
+              <div class="chart-legend">
+                <span class="legend-dot cyan"></span><span>Applications</span>
+                <span class="legend-dot amber"></span><span>Responses</span>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="weeklyChart"></canvas>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Skill Match Radar</h3>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="radarChart"></canvas>
+            </div>
+          </div>
+
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title">Salary Distribution</h3>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="salaryChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Insights Row -->
+        <div class="insights-grid" id="insightsGrid"></div>
+      </section>
+
+      <!-- ======== SECTION: MIND MAP ======== -->
+      <section class="content-section" id="mindmap">
+        <div class="section-header">
+          <h1 class="section-title">Job Application Mind Map</h1>
+          <p class="section-subtitle font-mono">// visual exploration of applied roles by industry & company size</p>
+        </div>
+
+        <div class="mindmap-toolbar">
+          <div class="filter-pills" id="mapFilters">
+            <button class="filter-pill active" data-filter="industry">BY INDUSTRY</button>
+            <button class="filter-pill" data-filter="size">BY COMPANY SIZE</button>
+            <button class="filter-pill" data-filter="status">BY STATUS</button>
+          </div>
+          <div class="map-controls">
+            <button class="map-btn" id="zoomIn" aria-label="Zoom in"><i data-lucide="zoom-in"></i></button>
+            <button class="map-btn" id="zoomOut" aria-label="Zoom out"><i data-lucide="zoom-out"></i></button>
+            <button class="map-btn" id="mapReset" aria-label="Reset view"><i data-lucide="refresh-cw"></i></button>
+          </div>
+        </div>
+
+        <div class="mindmap-container" id="mindmapContainer">
+          <canvas id="mindmapCanvas"></canvas>
+          <div class="map-tooltip" id="mapTooltip"></div>
+        </div>
+
+        <div class="mindmap-legend" id="mindmapLegend"></div>
+      </section>
+
+    </main>
+
+    <!-- ============ RIGHT PANEL ============ -->
+    <aside class="right-panel" id="rightPanel">
+      <div class="panel-section">
+        <h3 class="panel-title">Upcoming</h3>
+        <div class="upcoming-list" id="upcomingList"></div>
+      </div>
+
+      <div class="panel-section">
+        <h3 class="panel-title">Profile Health</h3>
+        <div class="health-bars" id="healthBars"></div>
+      </div>
+
+      <div class="panel-section">
+        <h3 class="panel-title">Quick Actions</h3>
+        <div class="quick-actions">
+          <button class="action-btn action-cyan">
+            <i data-lucide="plus-circle"></i>
+            Add Job
+          </button>
+          <button class="action-btn action-amber">
+            <i data-lucide="share-2"></i>
+            Export Report
+          </button>
+          <button class="action-btn action-purple">
+            <i data-lucide="refresh-cw"></i>
+            Sync LinkedIn
+          </button>
+          <button class="action-btn action-emerald">
+            <i data-lucide="file-text"></i>
+            Update Resume
+          </button>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- end app-layout -->
+
+  <script src="app.js"></script>
+</body>
+</html>
