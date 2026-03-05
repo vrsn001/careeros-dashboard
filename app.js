@@ -871,7 +871,7 @@ function initLandingPage() {
         }
 
         sessionStorage.setItem('careeros_user', username);
-        window.location.href = 'analyze.html';
+        window.location.href = `analyze.html?url=${encodeURIComponent(url)}`;
     });
 
     input.addEventListener('keypress', (e) => {
@@ -881,7 +881,20 @@ function initLandingPage() {
 
 function initTerminalProcessing() {
     const term = document.getElementById('terminalOutput');
-    const username = sessionStorage.getItem('careeros_user') || 'User';
+    let username = sessionStorage.getItem('careeros_user');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const linkUrl = urlParams.get('url');
+    if (linkUrl) {
+        const match = linkUrl.match(/in\/([^/]+)/);
+        if (match && match[1]) {
+            username = match[1].replace(/-/g, ' ');
+            username = username.replace(/\b\w/g, c => c.toUpperCase());
+            sessionStorage.setItem('careeros_user', username);
+        }
+    }
+
+    if (!username) username = 'User';
 
     const lines = [
         `> INITIALIZING SECURE CONNECTION TO LINKEDIN NODE...`,
@@ -901,15 +914,16 @@ function initTerminalProcessing() {
         setTimeout(() => {
             const p = document.createElement('div');
             p.textContent = line;
-            term.appendChild(p);
+            if (term) term.appendChild(p);
 
             // Scroll to bottom
             const container = document.querySelector('.terminal-window');
-            container.scrollTop = container.scrollHeight;
+            if (container) container.scrollTop = container.scrollHeight;
 
             if (i === lines.length - 1) {
                 setTimeout(() => {
-                    window.location.href = 'dashboard.html';
+                    const passUrl = linkUrl ? `?url=${encodeURIComponent(linkUrl)}` : '';
+                    window.location.href = `dashboard.html${passUrl}`;
                 }, 800);
             }
         }, delay);
@@ -919,13 +933,25 @@ function initTerminalProcessing() {
 }
 
 function initDashboardUser() {
-    const username = sessionStorage.getItem('careeros_user');
+    let username = sessionStorage.getItem('careeros_user');
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const linkUrl = urlParams.get('url');
+    if (linkUrl) {
+        const match = linkUrl.match(/in\/([^/]+)/);
+        if (match && match[1]) {
+            username = match[1].replace(/-/g, ' ');
+            username = username.replace(/\b\w/g, c => c.toUpperCase());
+            sessionStorage.setItem('careeros_user', username);
+        }
+    }
+
     if (username) {
-        const nameEl = document.getElementById('userName');
+        const nameEl = document.querySelector('.profile-name');
         if (nameEl) nameEl.textContent = username;
 
         const initials = username.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        const avatarEl = document.getElementById('userAvatar');
+        const avatarEl = document.getElementById('profileAvatar');
         if (avatarEl) avatarEl.textContent = initials;
     }
 }
