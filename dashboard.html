@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CareerOS — Career Intelligence Dashboard</title>
-  <meta name="description" content="Personal career analytics dashboard for job search, LinkedIn optimization, and professional growth tracking." />
+  <meta name="description"
+    content="Personal career analytics dashboard for job search, LinkedIn optimization, and professional growth tracking." />
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+    rel="stylesheet" />
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -18,7 +22,14 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- Vercel Analytics -->
+  <script>
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  </script>
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
+
 <body>
 
   <!-- Scanline Overlay -->
@@ -247,7 +258,8 @@
             <button class="filter-pill" data-filter="rejected">REJECTED</button>
           </div>
           <div class="view-toggle">
-            <button class="view-btn active" id="gridViewBtn" aria-label="Grid view"><i data-lucide="layout-grid"></i></button>
+            <button class="view-btn active" id="gridViewBtn" aria-label="Grid view"><i
+                data-lucide="layout-grid"></i></button>
             <button class="view-btn" id="listViewBtn" aria-label="List view"><i data-lucide="list"></i></button>
           </div>
         </div>
@@ -452,4 +464,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
