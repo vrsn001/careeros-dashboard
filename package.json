@@ -1,24 +1,27 @@
 {
-  "name": "linkedin-fetcher",
-  "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "name": "careeros-next",
+  "version": "0.1.0",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/vrsn001/careeros-dashboard.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/vrsn001/careeros-dashboard/issues"
-  },
-  "homepage": "https://github.com/vrsn001/careeros-dashboard#readme",
   "dependencies": {
-    "@vercel/analytics": "^1.6.1"
+    "apify-client": "^2.22.2",
+    "chart.js": "^4.5.1",
+    "lucide-react": "^0.577.0",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "typescript": "^5"
   }
 }
