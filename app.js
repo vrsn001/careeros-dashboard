@@ -136,6 +136,22 @@ const STATUS_COLORS = {
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
+
+    // Landing Page Flow
+    if (document.body.classList.contains('landing-page')) {
+        initLandingPage();
+        return;
+    }
+
+    // Terminal / Analyze Flow
+    if (document.body.classList.contains('terminal-page')) {
+        initTerminalProcessing();
+        return;
+    }
+
+    // Dashboard Flow
+    initDashboardUser();
+
     initDateTime();
     initNav();
     renderActivity();
@@ -829,4 +845,87 @@ function initViewToggle() {
         list.classList.add('active'); grid.classList.remove('active');
         jobsGrid.classList.add('list-view');
     });
+}
+
+// ── SAAS PRODUCT FLOW ────────────────────────────────────
+
+function initLandingPage() {
+    const btn = document.getElementById('extractBtn');
+    const input = document.getElementById('linkedinUrl');
+    const errorEl = document.getElementById('inputError');
+
+    btn.addEventListener('click', () => {
+        const url = input.value.trim();
+        if (!url) {
+            errorEl.textContent = '> ERROR: Provide a valid LinkedIn URL.';
+            errorEl.style.color = 'var(--red)';
+            return;
+        }
+
+        // Extract basic username for the MVP
+        let username = 'User';
+        const match = url.match(/in\/([^/]+)/);
+        if (match && match[1]) {
+            username = match[1].replace(/-/g, ' ');
+            username = username.replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        sessionStorage.setItem('careeros_user', username);
+        window.location.href = 'analyze.html';
+    });
+
+    input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') btn.click();
+    });
+}
+
+function initTerminalProcessing() {
+    const term = document.getElementById('terminalOutput');
+    const username = sessionStorage.getItem('careeros_user') || 'User';
+
+    const lines = [
+        `> INITIALIZING SECURE CONNECTION TO LINKEDIN NODE...`,
+        `> HANDSHAKE ESTABLISHED.`,
+        `> LOCATING PROFILE: [ ${username.toUpperCase()} ]`,
+        `> EXTRACTING EXPERIENCE & EDUCATION DATA... [OK]`,
+        `> DOWNLOADING SKILL ENDORSEMENTS... [OK]`,
+        `> CROSS-REFERENCING WITH GLOBAL JOB MARKET DB...`,
+        `> APPLYING MATCHING ALGORITHM (v3.0)...`,
+        `> GENERATING VISUAL MIND MAP...`,
+        `> ANALYZING SALARY BANDS...`,
+        `> EXTRACTION COMPLETE. PREPARING DASHBOARD...`
+    ];
+
+    let delay = 0;
+    lines.forEach((line, i) => {
+        setTimeout(() => {
+            const p = document.createElement('div');
+            p.textContent = line;
+            term.appendChild(p);
+
+            // Scroll to bottom
+            const container = document.querySelector('.terminal-window');
+            container.scrollTop = container.scrollHeight;
+
+            if (i === lines.length - 1) {
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 800);
+            }
+        }, delay);
+        // Randomize delay to look like real processing
+        delay += Math.floor(Math.random() * 400) + 200;
+    });
+}
+
+function initDashboardUser() {
+    const username = sessionStorage.getItem('careeros_user');
+    if (username) {
+        const nameEl = document.getElementById('userName');
+        if (nameEl) nameEl.textContent = username;
+
+        const initials = username.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        const avatarEl = document.getElementById('userAvatar');
+        if (avatarEl) avatarEl.textContent = initials;
+    }
 }
