@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
-from scrapers import scrape_all, scrape_remoteok, scrape_yc, scrape_hackernews, scrape_wellfound
+from scrapers import scrape_all, scrape_remoteok, scrape_yc, scrape_hackernews, scrape_wellfound, scrape_wellfound_url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 log = logging.getLogger("careeros")
@@ -145,6 +145,16 @@ class JobStatusIn(BaseModel):
 
 class MatchIn(BaseModel):
     job: dict
+
+
+class RankIn(BaseModel):
+    jobs: list[dict]
+
+
+class ImportUrlIn(BaseModel):
+    url: str
+    save: bool = False
+    status: str = "saved"
 
 
 class CoverLetterIn(BaseModel):
@@ -520,6 +530,155 @@ async def ai_cover_letter(body: CoverLetterIn, user: CurrentUser):
     if not parsed:
         raise HTTPException(status_code=502, detail="AI returned invalid JSON")
     return parsed
+
+
+# ---------- Bulk re-rank (one Claude call scores N jobs) -----------
+def _extract_json_any(raw: str):
+    """Like _extract_json but also accepts a top-level JSON array."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    # Try to find an array first, then object
+    for pat in (r"\[.*\]", r"\{.*\}"):
+        m = re.search(pat, raw, re.S)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except Exception:
+                continue
+    return None
+
+
+@app.post("/api/ai/rank")
+async def ai_rank(body: RankIn, user: CurrentUser):
+    """
+    Score a batch of jobs against the user's profile in a single Claude call.
+    Returns: { scores: { external_id: { score, one_liner } } }
+    """
+    profile = _profile_blob(user)
+    if not profile.strip():
+        raise HTTPException(status_code=400, detail="Add a profile/resume first")
+    if not body.jobs:
+        return {"scores": {}}
+
+    # Cap at 60 jobs per call to keep latency + token cost sane
+    jobs = body.jobs[:60]
+
+    # Compact job representation — minimize tokens
+    compact = []
+    for j in jobs:
+        compact.append({
+            "id": j.get("external_id") or "",
+            "title": (j.get("title") or "")[:120],
+            "company": (j.get("company") or "")[:60],
+            "tags": (j.get("tags") or [])[:5],
+            "location": (j.get("location") or "")[:60],
+            "remote": bool(j.get("remote")),
+            "desc": (j.get("description") or "")[:300],
+        })
+
+    system = (
+        "You are a senior tech recruiter scoring how well a candidate fits each job in a batch. "
+        "For EVERY job in the input, return a score 0-100 and a short one-line reason. "
+        "Be honest — most jobs should score 30-70; reserve 80+ for clear strong fits. "
+        "Return STRICT JSON ONLY in this exact schema:\n"
+        '{"scores":[{"id":"<external_id>","score":<int>,"one_liner":"<<=14 word reason>"}, ...]}\n'
+        "Include one entry per input job. Do not omit any."
+    )
+    prompt = (
+        f"CANDIDATE PROFILE:\n{profile}\n\n"
+        f"JOBS (JSON array):\n{json.dumps(compact, ensure_ascii=False)}\n\n"
+        "Return the JSON now."
+    )
+    raw = await _claude_json(system, prompt, session_id=f"rank-{user['_id']}")
+    parsed = _extract_json_any(raw)
+    if not parsed:
+        raise HTTPException(status_code=502, detail="AI returned invalid JSON")
+
+    items = parsed.get("scores") if isinstance(parsed, dict) else parsed
+    if not isinstance(items, list):
+        raise HTTPException(status_code=502, detail="AI response not in expected shape")
+
+    scores_map: dict[str, dict] = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ext_id = it.get("id") or it.get("external_id")
+        if not ext_id:
+            continue
+        try:
+            score = int(it.get("score", 0))
+        except (TypeError, ValueError):
+            score = 0
+        score = max(0, min(100, score))
+        scores_map[str(ext_id)] = {
+            "score": score,
+            "one_liner": (it.get("one_liner") or it.get("reason") or "")[:200],
+        }
+
+    return {"scores": scores_map, "ranked_count": len(scores_map)}
+
+
+# ---------- Wellfound URL import -----------
+@app.post("/api/jobs/import")
+async def import_job_url(body: ImportUrlIn, user: CurrentUser):
+    """
+    Paste a Wellfound (or AngelList legacy) job URL → fetch, parse, return
+    normalized job. Optionally save in one shot when `save=true`.
+    """
+    url = (body.url or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL required")
+
+    try:
+        job = await scrape_wellfound_url(url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        log.exception("Wellfound import failed")
+        raise HTTPException(status_code=502, detail=f"Could not fetch job: {type(e).__name__}")
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Could not extract any job data from that URL")
+
+    result = {"job": job, "saved": None}
+
+    if body.save:
+        doc = {
+            "user_id": user["_id"],
+            "external_id": job["external_id"],
+            "source": job.get("source"),
+            "title": job["title"],
+            "company": job.get("company"),
+            "company_logo": job.get("company_logo"),
+            "location": job.get("location"),
+            "remote": bool(job.get("remote")),
+            "tags": job.get("tags") or [],
+            "salary": job.get("salary"),
+            "description": job.get("description"),
+            "apply_url": job.get("apply_url"),
+            "posted_at": job.get("posted_at"),
+            "status": body.status or "saved",
+            "notes": "",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        await db.saved_jobs.update_one(
+            {"user_id": user["_id"], "external_id": job["external_id"]},
+            {"$set": doc, "$setOnInsert": {"_id": ObjectId()}},
+            upsert=True,
+        )
+        saved = await db.saved_jobs.find_one({"user_id": user["_id"], "external_id": job["external_id"]})
+        result["saved"] = _serialize(saved or {})
+
+    return result
 
 
 def _extract_json(raw: str) -> Optional[dict]:

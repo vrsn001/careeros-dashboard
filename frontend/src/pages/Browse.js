@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, RefreshCw, ExternalLink, BookmarkPlus, Sparkles, MapPin, Briefcase, Wallet, X, Copy, Globe,
+  Search, RefreshCw, ExternalLink, BookmarkPlus, Sparkles, MapPin, Briefcase, Wallet, X, Copy, Globe, Wand2, Link2, ArrowUpDown,
 } from 'lucide-react';
 import api, { formatApiError } from '../api';
 import { useToast } from '../Toast';
@@ -21,6 +21,10 @@ export default function Browse() {
   const [error, setError] = useState('');
   const [activeJob, setActiveJob] = useState(null);
   const [savedIds, setSavedIds] = useState(new Set());
+  const [scoreMap, setScoreMap] = useState({}); // external_id → {score, one_liner}
+  const [ranking, setRanking] = useState(false);
+  const [sortByScore, setSortByScore] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   async function fetchJobs(opts = {}) {
     setLoading(true);
@@ -35,6 +39,9 @@ export default function Browse() {
       if (opts.refresh) params.set('refresh', 'true');
       const { data } = await api.get(`/jobs/search?${params.toString()}`);
       setData(data);
+      // Refreshing invalidates previous rank scores
+      setScoreMap({});
+      setSortByScore(false);
     } catch (e) {
       setError(formatApiError(e));
     } finally {
@@ -60,7 +67,41 @@ export default function Browse() {
   }
 
   const jobs = data?.jobs || [];
-  const visibleJobs = useMemo(() => jobs, [jobs]);
+  const visibleJobs = useMemo(() => {
+    if (!sortByScore || Object.keys(scoreMap).length === 0) return jobs;
+    return [...jobs].sort((a, b) => {
+      const sa = scoreMap[a.external_id]?.score ?? -1;
+      const sb = scoreMap[b.external_id]?.score ?? -1;
+      return sb - sa;
+    });
+  }, [jobs, sortByScore, scoreMap]);
+
+  async function runRank() {
+    if (jobs.length === 0) {
+      toast('Load jobs first', 'error');
+      return;
+    }
+    setRanking(true);
+    try {
+      const payload = { jobs: jobs.slice(0, 60).map((j) => ({
+        external_id: j.external_id,
+        title: j.title,
+        company: j.company,
+        tags: j.tags,
+        location: j.location,
+        remote: j.remote,
+        description: j.description,
+      })) };
+      const { data } = await api.post('/ai/rank', payload);
+      setScoreMap(data.scores || {});
+      setSortByScore(true);
+      toast(`Ranked ${data.ranked_count || 0} jobs against your profile`, 'success');
+    } catch (e) {
+      toast(formatApiError(e), 'error');
+    } finally {
+      setRanking(false);
+    }
+  }
 
   async function saveJob(job, status = 'saved') {
     try {
@@ -79,7 +120,18 @@ export default function Browse() {
           <h1 className="section-title">Browse Jobs</h1>
           <p className="section-subtitle">// live feed from {ALL_SOURCES.length} sources · 10 min cache</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="toolbar-action" onClick={() => setImportOpen(true)} data-testid="browse-import-btn">
+            <Link2 size={12} /> IMPORT URL
+          </button>
+          <button className="toolbar-action" onClick={runRank} disabled={ranking || jobs.length === 0} data-testid="browse-rank-btn" style={{ color: 'var(--purple)', borderColor: 'var(--purple-glow)', background: 'var(--purple-dim)' }}>
+            <Wand2 size={12} /> {ranking ? 'RANKING…' : 'AI RANK ALL'}
+          </button>
+          {Object.keys(scoreMap).length > 0 && (
+            <button className="toolbar-action" onClick={() => setSortByScore((s) => !s)} data-testid="browse-sort-btn" style={{ color: sortByScore ? 'var(--amber)' : 'var(--text-secondary)' }}>
+              <ArrowUpDown size={12} /> {sortByScore ? 'SORTED BY SCORE' : 'SORT BY SCORE'}
+            </button>
+          )}
           <button className="toolbar-action" onClick={() => fetchJobs({ refresh: true })} disabled={loading} data-testid="browse-refresh-btn">
             <RefreshCw size={12} /> {loading ? 'REFRESHING…' : 'REFRESH'}
           </button>
@@ -149,6 +201,7 @@ export default function Browse() {
               key={job.external_id}
               job={job}
               saved={savedIds.has(job.external_id)}
+              score={scoreMap[job.external_id]}
               onSave={() => saveJob(job)}
               onOpen={() => setActiveJob(job)}
             />
@@ -157,14 +210,25 @@ export default function Browse() {
       )}
 
       {activeJob && <JobModal job={activeJob} onClose={() => setActiveJob(null)} onSave={(s) => saveJob(activeJob, s)} alreadySaved={savedIds.has(activeJob.external_id)} />}
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onSaved={(j) => { setSavedIds((s) => new Set([...s, j.external_id])); toast(`Imported · ${j.title?.slice(0,30) || 'job'}…`, 'success'); }} />}
     </section>
   );
 }
 
-function JobCard({ job, saved, onSave, onOpen }) {
+function scoreColor(s) {
+  return s >= 80 ? 'var(--emerald)' : s >= 60 ? 'var(--amber)' : s >= 40 ? 'var(--purple)' : 'var(--rose)';
+}
+
+function JobCard({ job, saved, onSave, onOpen, score }) {
+  const col = score ? scoreColor(score.score) : null;
   return (
-    <div className="job-card" data-testid={`job-card-${job.external_id}`}>
-      <div className="job-card-header">
+    <div className="job-card" data-testid={`job-card-${job.external_id}`} style={score ? { boxShadow: `inset 3px 0 0 ${col}` } : undefined}>
+      {score && (
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: `color-mix(in srgb, ${col} 15%, transparent)`, border: `1px solid ${col}`, borderRadius: 20, padding: '2px 10px', fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, color: col }} data-testid={`job-score-${job.external_id}`}>
+          <Sparkles size={11} /> {score.score}
+        </div>
+      )}
+      <div className="job-card-header" style={score ? { paddingRight: 60 } : undefined}>
         <div className="job-logo">
           {job.company_logo ? <img src={job.company_logo} alt="" onError={(e) => { e.target.style.display = 'none'; }} /> : (job.company?.[0] || '?').toUpperCase()}
         </div>
@@ -172,8 +236,13 @@ function JobCard({ job, saved, onSave, onOpen }) {
           <div className="job-title" onClick={onOpen} style={{ cursor: 'pointer' }} data-testid={`job-title-${job.external_id}`}>{job.title}</div>
           <div className="job-company">{job.company}</div>
         </div>
-        <span className={`job-source-badge src-${job.source}`}>{job.source === 'ycombinator' ? 'YC' : job.source === 'hackernews' ? 'HN' : job.source === 'remoteok' ? 'RMTOK' : 'WLFND'}</span>
+        {!score && <span className={`job-source-badge src-${job.source}`}>{job.source === 'ycombinator' ? 'YC' : job.source === 'hackernews' ? 'HN' : job.source === 'remoteok' ? 'RMTOK' : 'WLFND'}</span>}
       </div>
+      {score && (
+        <div style={{ fontSize: 11, color: col, fontStyle: 'italic', marginBottom: 10, paddingLeft: 4, borderLeft: `2px solid ${col}`, paddingLeft: 8 }} data-testid={`job-score-reason-${job.external_id}`}>
+          {score.one_liner}
+        </div>
+      )}
       <div className="job-tags">
         {(job.tags || []).slice(0, 5).map((t, i) => <span key={i} className="job-tag">{t}</span>)}
       </div>
@@ -335,6 +404,115 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function ImportModal({ onClose, onSaved }) {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState(null);
+
+  async function fetchPreview() {
+    setError('');
+    setPreview(null);
+    if (!url.trim()) return;
+    setLoading(true);
+    try {
+      const { data } = await api.post('/jobs/import', { url: url.trim(), save: false });
+      setPreview(data.job);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveIt() {
+    setLoading(true);
+    setError('');
+    try {
+      const { data } = await api.post('/jobs/import', { url: url.trim(), save: true, status: 'saved' });
+      if (data.saved) {
+        onSaved(data.job);
+        onClose();
+      }
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} data-testid="import-modal">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+        <button className="modal-close" onClick={onClose} aria-label="Close" data-testid="import-modal-close">
+          <X size={18} />
+        </button>
+        <div className="modal-header">
+          <div className="modal-title">Import a Wellfound job</div>
+          <div className="modal-sub">// paste a wellfound.com/jobs/… URL — we'll parse it and save</div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Wellfound job URL</label>
+          <input
+            className="form-input"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://wellfound.com/jobs/12345-senior-engineer"
+            onKeyDown={(e) => e.key === 'Enter' && fetchPreview()}
+            data-testid="import-modal-url-input"
+            autoFocus
+          />
+          <div className="form-hint">
+            Wellfound aggressively blocks server-side requests. If you get a blocked error, click
+            <strong style={{ color: 'var(--amber)' }}> Open Original</strong> below and copy the job description into a saved job manually.
+          </div>
+        </div>
+
+        {error && <div className="form-error" data-testid="import-modal-error" style={{ minHeight: 0, marginBottom: 12 }}>{error}</div>}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" onClick={fetchPreview} disabled={loading || !url.trim()} data-testid="import-modal-preview-btn">
+            {loading && !preview ? 'FETCHING…' : 'PREVIEW'}
+          </button>
+          {url.trim() && (
+            <a className="btn-ghost" href={url.trim()} target="_blank" rel="noopener noreferrer" data-testid="import-modal-open-original">
+              <ExternalLink size={12} /> Open Original
+            </a>
+          )}
+        </div>
+
+        {preview && (
+          <div className="match-result" style={{ borderColor: 'var(--cyan-glow)', background: 'var(--bg-200)', marginTop: 16 }} data-testid="import-modal-preview">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 10 }}>
+              <div className="job-logo">{(preview.company?.[0] || '?').toUpperCase()}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="job-title" data-testid="import-modal-preview-title">{preview.title}</div>
+                <div className="job-company">{preview.company}</div>
+              </div>
+              <span className="job-source-badge src-wellfound">WLFND</span>
+            </div>
+            {preview.description && (
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', maxHeight: 160, overflowY: 'auto', padding: 10, background: 'var(--bg-base)', borderRadius: 4, border: '1px solid var(--border-dim)', lineHeight: 1.55 }}>
+                {preview.description}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button className="btn-primary" onClick={saveIt} disabled={loading} data-testid="import-modal-save-btn">
+                <BookmarkPlus size={12} /> {loading ? 'SAVING…' : 'SAVE TO PIPELINE'}
+              </button>
+              <button className="btn-ghost" onClick={() => setPreview(null)} data-testid="import-modal-clear-btn">
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -244,3 +244,125 @@ class TestAI:
         d = r.json()
         assert d.get("cover_letter") and len(d["cover_letter"]) > 100
         assert d.get("subject") and isinstance(d["subject"], str)
+
+
+
+# ---------- AI Rank (bulk) ----------
+class TestAIRank:
+    @pytest.fixture(scope="class")
+    def rank_jobs(self):
+        return [
+            {
+                "external_id": "rank-test-1",
+                "source": "test",
+                "title": "Senior React Engineer",
+                "company": "Acme",
+                "tags": ["react", "typescript"],
+                "location": "Remote",
+                "remote": True,
+                "description": "Build modern UIs with React + TS, ship dashboards.",
+            },
+            {
+                "external_id": "rank-test-2",
+                "source": "test",
+                "title": "Backend Python/FastAPI Engineer",
+                "company": "Globex",
+                "tags": ["python", "fastapi", "mongodb"],
+                "location": "Remote",
+                "remote": True,
+                "description": "Design APIs with FastAPI, MongoDB, async pipelines.",
+            },
+            {
+                "external_id": "rank-test-3",
+                "source": "test",
+                "title": "Senior iOS Engineer (Swift)",
+                "company": "Initech",
+                "tags": ["ios", "swift"],
+                "location": "NYC",
+                "remote": False,
+                "description": "Build native iOS apps in Swift; UIKit + SwiftUI.",
+            },
+            {
+                "external_id": "rank-test-4",
+                "source": "test",
+                "title": "Full-Stack Engineer (React + Python)",
+                "company": "TestCorp",
+                "tags": ["react", "python", "fastapi", "mongodb"],
+                "location": "Remote",
+                "remote": True,
+                "description": "Lead full-stack work using React, TypeScript, Python, FastAPI, MongoDB.",
+            },
+        ]
+
+    def test_rank_returns_scores_for_all_jobs(self, api, auth_headers, rank_jobs):
+        r = api.post(f"{BASE_URL}/api/ai/rank", headers=auth_headers, json={"jobs": rank_jobs}, timeout=120)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "scores" in d and isinstance(d["scores"], dict)
+        assert d.get("ranked_count") == len(d["scores"])
+        # Ideally each input job has a score; allow at least 50% in case AI omits
+        returned_ids = set(d["scores"].keys())
+        expected_ids = {j["external_id"] for j in rank_jobs}
+        overlap = returned_ids & expected_ids
+        assert len(overlap) >= max(1, len(expected_ids) // 2), f"too few ids returned: {returned_ids}"
+        for ext_id, item in d["scores"].items():
+            assert isinstance(item.get("score"), int)
+            assert 0 <= item["score"] <= 100
+            assert isinstance(item.get("one_liner"), str)
+            assert len(item["one_liner"].strip()) > 0
+
+    def test_rank_empty_jobs(self, api, auth_headers):
+        r = api.post(f"{BASE_URL}/api/ai/rank", headers=auth_headers, json={"jobs": []}, timeout=30)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d.get("scores") == {}
+
+    def test_rank_requires_auth(self, api, rank_jobs):
+        r = api.post(f"{BASE_URL}/api/ai/rank", json={"jobs": rank_jobs[:1]}, timeout=30)
+        assert r.status_code == 401, f"expected 401, got {r.status_code}: {r.text}"
+
+
+# ---------- Wellfound URL Import ----------
+class TestJobsImport:
+    def test_import_non_wellfound_url(self, api, auth_headers):
+        r = api.post(
+            f"{BASE_URL}/api/jobs/import",
+            headers=auth_headers,
+            json={"url": "https://example.com/jobs/123"},
+            timeout=30,
+        )
+        assert r.status_code == 400, r.text
+        d = r.json()
+        msg = (d.get("detail") or "").lower()
+        assert "wellfound" in msg, f"unexpected error message: {d}"
+
+    def test_import_empty_url(self, api, auth_headers):
+        r = api.post(
+            f"{BASE_URL}/api/jobs/import",
+            headers=auth_headers,
+            json={"url": ""},
+            timeout=15,
+        )
+        assert r.status_code == 400
+
+    def test_import_real_wellfound_url_blocked_or_ok(self, api, auth_headers):
+        # DataDome will likely block — accept either 400 (human-readable blocked msg)
+        # or 200 (worked) but DO NOT fail-out the test on the blocked path.
+        r = api.post(
+            f"{BASE_URL}/api/jobs/import",
+            headers=auth_headers,
+            json={"url": "https://wellfound.com/jobs/4240794-product-engineer-scrape"},
+            timeout=60,
+        )
+        assert r.status_code in (200, 400, 404, 502), r.text
+        if r.status_code != 200:
+            d = r.json()
+            assert "detail" in d and isinstance(d["detail"], str) and len(d["detail"]) > 0
+
+    def test_import_requires_auth(self, api):
+        r = api.post(
+            f"{BASE_URL}/api/jobs/import",
+            json={"url": "https://wellfound.com/jobs/1"},
+            timeout=15,
+        )
+        assert r.status_code == 401

@@ -335,6 +335,94 @@ async def scrape_wellfound(query: str = "", limit: int = 40) -> list[dict[str, A
         return []
 
 
+async def scrape_wellfound_url(url: str) -> dict[str, Any] | None:
+    """
+    Fetch a SINGLE Wellfound job URL and parse it.
+    Used by the URL-import flow on the frontend. Returns one normalized job dict
+    or raises ValueError with a human message on failure.
+    """
+    if "wellfound.com" not in url and "angel.co" not in url:
+        raise ValueError("Not a Wellfound URL")
+
+    async with httpx.AsyncClient(timeout=20.0, headers=WELLFOUND_HEADERS, follow_redirects=True) as client:
+        r = await client.get(url)
+        if r.status_code == 403:
+            raise ValueError("Wellfound blocked the request (DataDome). Try again later or use the Open Original link.")
+        if r.status_code != 200:
+            raise ValueError(f"Wellfound returned HTTP {r.status_code}")
+
+    soup = BeautifulSoup(r.text, "lxml")
+
+    # Strategy 1: Parse __NEXT_DATA__
+    next_data_tag = soup.find("script", id="__NEXT_DATA__")
+    if next_data_tag and next_data_tag.string:
+        try:
+            import json as _json
+            data = _json.loads(next_data_tag.string)
+            # Look for a single job
+            single = _walk_for_single_job(data)
+            if single:
+                return _normalize_wellfound_job(single)
+            # Or any list of jobs (return first)
+            jobs_raw = _walk_for_jobs(data) or []
+            if jobs_raw:
+                return _normalize_wellfound_job(jobs_raw[0])
+        except Exception:
+            pass
+
+    # Strategy 2: scrape meta tags + DOM
+    title = (
+        (soup.find("meta", property="og:title") or {}).get("content")
+        or (soup.title.string if soup.title else None)
+        or ""
+    ).strip()
+    description = (soup.find("meta", attrs={"name": "description"}) or {}).get("content", "").strip()
+    # Try to extract company from URL: /jobs/{id}-{slug} OR /company/{slug}/jobs/{id}-{slug}
+    m = re.search(r"/company/([^/]+)/", url)
+    company = m.group(1).replace("-", " ").title() if m else "Wellfound"
+
+    if not title:
+        raise ValueError("Could not extract job details from URL")
+
+    # Compose external_id from URL path
+    path_id = re.search(r"/jobs/(\d+)", url)
+    ext_id = path_id.group(1) if path_id else url.rsplit("/", 1)[-1][:32]
+
+    return {
+        "source": "wellfound",
+        "external_id": f"wellfound-{ext_id}",
+        "title": title.replace(" | Wellfound", "").strip(),
+        "company": company,
+        "company_logo": None,
+        "location": None,
+        "remote": "remote" in (title + description).lower(),
+        "tags": [],
+        "salary": None,
+        "description": description[:1500],
+        "apply_url": url,
+        "posted_at": None,
+    }
+
+
+def _walk_for_single_job(node, depth=0):
+    """Look for a node that is itself a single job object (has jobTitle + id)."""
+    if depth > 8:
+        return None
+    if isinstance(node, dict):
+        if "jobTitle" in node and ("id" in node or "slug" in node):
+            return node
+        for v in node.values():
+            res = _walk_for_single_job(v, depth + 1)
+            if res:
+                return res
+    elif isinstance(node, list):
+        for it in node:
+            res = _walk_for_single_job(it, depth + 1)
+            if res:
+                return res
+    return None
+
+
 def _walk_for_jobs(node, depth=0) -> list[dict] | None:
     if depth > 7:
         return None
