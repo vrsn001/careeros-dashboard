@@ -69,34 +69,34 @@ export default function Analytics() {
     <section className="content-section" data-testid="analytics-section">
       <div className="section-header">
         <div>
-          <h1 className="section-title">Career Analytics</h1>
-          <p className="section-subtitle">// data-driven insights from your application pipeline</p>
+          <h1 className="section-title">the funnel of cope.</h1>
+          <p className="section-subtitle">// where your applications go to die. but make it data-driven.</p>
         </div>
       </div>
 
       <div className="kpi-grid" data-testid="analytics-kpis">
-        <Kpi color="kpi-cyan" icon={<Send size={20} />} value={s.applied || 0} label="Applications Sent" />
-        <Kpi color="kpi-amber" icon={<MailOpen size={20} />} value={s.interview || 0} label="Interviews" />
-        <Kpi color="kpi-purple" icon={<Video size={20} />} value={`${response}%`} label="Response Rate" />
-        <Kpi color="kpi-emerald" icon={<Trophy size={20} />} value={s.offer || 0} label="Offers" />
-        <Kpi color="kpi-rose" icon={<BookmarkCheck size={20} />} value={s.saved || 0} label="Saved" />
-        <Kpi color="kpi-indigo" icon={<Star size={20} />} value={total} label="Total Tracked" />
+        <Kpi color="kpi-cyan" icon={<Send size={20} />} value={s.applied || 0} label="apps sent into the void" />
+        <Kpi color="kpi-amber" icon={<MailOpen size={20} />} value={s.interview || 0} label="callbacks (real ones)" />
+        <Kpi color="kpi-purple" icon={<Video size={20} />} value={`${response}%`} label="response rate" />
+        <Kpi color="kpi-emerald" icon={<Trophy size={20} />} value={s.offer || 0} label="offers · brag time" />
+        <Kpi color="kpi-rose" icon={<BookmarkCheck size={20} />} value={s.saved || 0} label="saved · cope queue" />
+        <Kpi color="kpi-indigo" icon={<Star size={20} />} value={total} label="total roles tracked" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         <div className="card">
-          <div className="card-header"><h3 className="card-title">Application Funnel</h3><span className="card-badge font-mono">LIVE</span></div>
+          <div className="card-header"><h3 className="card-title">where they ended up</h3><span className="card-badge font-mono">LIVE</span></div>
           <div style={{ position: 'relative', height: 280 }}><canvas ref={funnelRef} /></div>
         </div>
         <div className="card">
-          <div className="card-header"><h3 className="card-title">By Source</h3></div>
+          <div className="card-header"><h3 className="card-title">by source</h3></div>
           <div style={{ position: 'relative', height: 280 }}><canvas ref={sourceRef} /></div>
         </div>
       </div>
 
       {total === 0 && (
         <div className="empty-state" data-testid="analytics-empty" style={{ marginTop: 24 }}>
-          No jobs tracked yet. Save a few from <strong style={{ color: 'var(--amber)' }}>Browse</strong> to populate these charts.
+          no jobs tracked. the chart can't graph nothing.<br />save something from <strong style={{ color: 'var(--amber)' }}>browse</strong> first.
         </div>
       )}
     </section>

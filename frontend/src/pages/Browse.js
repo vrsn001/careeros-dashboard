@@ -98,7 +98,7 @@ export default function Browse() {
       const { data } = await api.post('/ai/rank', payload);
       setScoreMap(data.scores || {});
       setSortByScore(true);
-      toast(`Ranked ${data.ranked_count || 0} jobs against your profile`, 'success');
+      toast(`judged ${data.ranked_count || 0} jobs. truth hurts.`, 'success');
     } catch (e) {
       toast(formatApiError(e), 'error');
     } finally {
@@ -110,7 +110,7 @@ export default function Browse() {
     try {
       await api.post('/saved-jobs', { job, status });
       setSavedIds((s) => new Set([...s, job.external_id]));
-      toast(`Saved · ${job.title.slice(0, 30)}…`, 'success');
+      toast(`saved · ${job.title.slice(0, 30)}… don't ghost yourself.`, 'success');
     } catch (e) {
       toast(formatApiError(e), 'error');
     }
@@ -120,23 +120,23 @@ export default function Browse() {
     <section className="content-section" data-testid="browse-section">
       <div className="section-header">
         <div>
-          <h1 className="section-title">Browse Jobs</h1>
-          <p className="section-subtitle">// live feed from {ALL_SOURCES.length} sources · 10 min cache</p>
+          <h1 className="section-title">browse jobs.</h1>
+          <p className="section-subtitle">// 4 sources, 10 min cache, 0 ghost interviews</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="toolbar-action" onClick={() => setImportOpen(true)} data-testid="browse-import-btn">
             <Link2 size={12} /> IMPORT URL
           </button>
           <button className="toolbar-action" onClick={runRank} disabled={ranking || jobs.length === 0} data-testid="browse-rank-btn" style={{ color: 'var(--purple)', borderColor: 'var(--purple-glow)', background: 'var(--purple-dim)' }}>
-            <Wand2 size={12} /> {ranking ? 'RANKING…' : 'AI RANK ALL'}
+            <Wand2 size={12} /> {ranking ? 'JUDGING YOU…' : 'GHOST CHECK'}
           </button>
           {Object.keys(scoreMap).length > 0 && (
             <button className="toolbar-action" onClick={() => setSortByScore((s) => !s)} data-testid="browse-sort-btn" style={{ color: sortByScore ? 'var(--amber)' : 'var(--text-secondary)' }}>
-              <ArrowUpDown size={12} /> {sortByScore ? 'SORTED BY SCORE' : 'SORT BY SCORE'}
+              <ArrowUpDown size={12} /> {sortByScore ? 'SORTED · BEST FIRST' : 'SORT BY FIT'}
             </button>
           )}
           <button className="toolbar-action" onClick={() => fetchJobs({ refresh: true })} disabled={loading} data-testid="browse-refresh-btn">
-            <RefreshCw size={12} /> {loading ? 'REFRESHING…' : 'REFRESH'}
+            <RefreshCw size={12} /> {loading ? 'FETCHING…' : 'REFRESH'}
           </button>
         </div>
       </div>
@@ -146,7 +146,7 @@ export default function Browse() {
           <Search size={14} />
           <input
             type="text"
-            placeholder="search role, company, stack… (e.g. 'react', 'python', 'staff engineer')"
+            placeholder="search role, company, stack… (or just type 'remote' and pray)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchJobs()}
@@ -195,7 +195,7 @@ export default function Browse() {
       ) : visibleJobs.length === 0 ? (
         <div className="empty-state" data-testid="browse-empty">
           <Briefcase size={40} />
-          <div>No roles found.<br />Try clearing your search or changing sources.</div>
+          <div>0 jobs. maybe the job wasn't real anyway.<br />try different keywords or hit refresh.</div>
         </div>
       ) : (
         <div className="jobs-grid" data-testid="browse-jobs-grid">
@@ -213,7 +213,7 @@ export default function Browse() {
       )}
 
       {activeJob && <JobModal job={activeJob} onClose={() => setActiveJob(null)} onSave={(s) => saveJob(activeJob, s)} alreadySaved={savedIds.has(activeJob.external_id)} />}
-      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onSaved={(j) => { setSavedIds((s) => new Set([...s, j.external_id])); toast(`Imported · ${j.title?.slice(0,30) || 'job'}…`, 'success'); }} />}
+      {importOpen && <ImportModal onClose={() => setImportOpen(false)} onSaved={(j) => { setSavedIds((s) => new Set([...s, j.external_id])); toast(`imported · ${j.title?.slice(0,30) || 'job'} · saved.`, 'success'); }} />}
     </section>
   );
 }
@@ -307,7 +307,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
 
   function copyCover() {
     if (!cover?.cover_letter) return;
-    navigator.clipboard.writeText(cover.cover_letter).then(() => toast('Cover letter copied', 'success'));
+    navigator.clipboard.writeText(cover.cover_letter).then(() => toast('copied. paste it and pray.', 'success'));
   }
 
   const scoreColor = (s) => s >= 80 ? 'var(--emerald)' : s >= 60 ? 'var(--amber)' : s >= 40 ? 'var(--purple)' : 'var(--rose)';
@@ -338,23 +338,23 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
         <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
           {job.apply_url && (
             <a className="btn-primary" href={job.apply_url} target="_blank" rel="noopener noreferrer" data-testid="job-modal-apply-btn">
-              <ExternalLink size={12} /> Open original
+              <ExternalLink size={12} /> SEND IT
             </a>
           )}
           <button className="btn-secondary" onClick={() => onSave('saved')} disabled={alreadySaved} data-testid="job-modal-save-btn">
-            <BookmarkPlus size={12} /> {alreadySaved ? 'Saved' : 'Save'}
+            <BookmarkPlus size={12} /> {alreadySaved ? 'SAVED' : 'SAVE FOR LATER'}
           </button>
           <button className="btn-secondary" onClick={() => onSave('applied')} data-testid="job-modal-mark-applied-btn">
-            Mark as applied
+            mark as applied (cope)
           </button>
         </div>
 
         {/* AI MATCH */}
         <div style={{ marginTop: 22, borderTop: '1px solid var(--border-dim)', paddingTop: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>AI Match Score</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>am I cooked? — AI match</h3>
             <button className="toolbar-action" onClick={runMatch} disabled={matchLoading} data-testid="job-modal-match-btn">
-              <Sparkles size={12} /> {matchLoading ? 'SCORING…' : match ? 'RE-RUN' : 'RUN MATCH'}
+              <Sparkles size={12} /> {matchLoading ? 'JUDGING…' : match ? 'RE-JUDGE' : 'RUN MATCH'}
             </button>
           </div>
           {matchError && <div style={{ color: 'var(--rose)', fontSize: 12, fontFamily: 'var(--font-mono)' }} data-testid="job-modal-match-error">{matchError}</div>}
@@ -384,7 +384,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
         {/* AI COVER LETTER */}
         <div style={{ marginTop: 22, borderTop: '1px solid var(--border-dim)', paddingTop: 18 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Cover Letter Draft</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>beg with style — cover letter</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <select className="form-select" style={{ padding: '6px 10px', fontSize: 11, width: 'auto' }} value={tone} onChange={(e) => setTone(e.target.value)} data-testid="job-modal-cover-tone">
                 <option value="professional">Professional</option>
@@ -392,7 +392,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
                 <option value="casual">Casual</option>
               </select>
               <button className="toolbar-action" onClick={runCover} disabled={coverLoading} data-testid="job-modal-cover-btn">
-                <Sparkles size={12} /> {coverLoading ? 'DRAFTING…' : cover ? 'RE-DRAFT' : 'DRAFT LETTER'}
+                <Sparkles size={12} /> {coverLoading ? 'WRITING…' : cover ? 'RE-DRAFT' : 'DRAFT IT'}
               </button>
             </div>
           </div>
@@ -457,8 +457,8 @@ function ImportModal({ onClose, onSaved }) {
           <X size={18} />
         </button>
         <div className="modal-header">
-          <div className="modal-title">Import a Wellfound job</div>
-          <div className="modal-sub">// paste a wellfound.com/jobs/… URL — we'll parse it and save</div>
+          <div className="modal-title">import a wellfound job.</div>
+          <div className="modal-sub">// paste a wellfound.com/jobs/… URL — we'll parse it</div>
         </div>
 
         <div className="form-group">
@@ -467,14 +467,14 @@ function ImportModal({ onClose, onSaved }) {
             className="form-input"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://wellfound.com/jobs/12345-senior-engineer"
+            placeholder="https://wellfound.com/jobs/12345-senior-glorified-typist"
             onKeyDown={(e) => e.key === 'Enter' && fetchPreview()}
             data-testid="import-modal-url-input"
             autoFocus
           />
           <div className="form-hint">
-            Wellfound aggressively blocks server-side requests. If you get a blocked error, click
-            <strong style={{ color: 'var(--amber)' }}> Open Original</strong> below and copy the job description into a saved job manually.
+            heads up: wellfound's bot protection is mid. if the import fails, hit
+            <strong style={{ color: 'var(--amber)' }}> open original</strong> and YOLO it manually.
           </div>
         </div>
 

@@ -55,58 +55,58 @@ export default function Auth() {
             </div>
           </div>
           <h1 className="hero-title" style={{ fontSize: 44 }}>
-            {mode === 'login' ? (<>Welcome<br /><span className="text-amber">back, operator.</span></>) : (<>Spin up<br /><span className="text-cyan">your job radar.</span></>)}
+            {mode === 'login' ? (<>Welcome back,<br /><span className="text-amber">you magnificent disaster.</span></>) : (<>Make an account,<br /><span className="text-cyan">join the unhirables.</span></>)}
           </h1>
           <p className="hero-subtitle">
             {mode === 'login'
-              ? 'Sign in to access your saved jobs, applications and AI match scores.'
-              : 'Create a free account to track jobs, get AI match scores and draft cover letters in seconds.'}
+              ? "Sign in to see your saved jobs and how many recruiters have left you on read."
+              : "30 seconds. No credit card. No 'we'll be in touch'. Just upload your LinkedIn PDF and let the algorithm tell you who you actually are."}
           </p>
           <div className="hero-feature-list">
-            <div className="hero-feature">→ 4 job sources scraped live</div>
-            <div className="hero-feature">→ Claude Sonnet 4.5 matching</div>
-            <div className="hero-feature">→ Save → apply → track pipeline</div>
-            <div className="hero-feature">→ Cover letter drafts</div>
+            <div className="hero-feature">→ Upload LinkedIn PDF · AI parses it</div>
+            <div className="hero-feature">→ Honest match scores (no copium)</div>
+            <div className="hero-feature">→ Cover letters that don't sound AI</div>
+            <div className="hero-feature">→ Export your whole career in 1 click</div>
           </div>
           <button className="btn-ghost" style={{ alignSelf: 'flex-start', marginTop: 14 }} onClick={fillDemo} data-testid="auth-fill-demo-btn">
-            Use demo account (demo@careeros.io)
+            Use demo account (no commitment, like your last 3 ex's)
           </button>
         </div>
 
         <div className="auth-card">
           <div className="auth-tabs">
-            <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')} data-testid="auth-tab-login">SIGN IN</button>
-            <button className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setMode('register')} data-testid="auth-tab-register">CREATE ACCOUNT</button>
+            <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')} data-testid="auth-tab-login">LOG IN</button>
+            <button className={`auth-tab ${mode === 'register' ? 'active' : ''}`} onClick={() => setMode('register')} data-testid="auth-tab-register">SIGN UP</button>
           </div>
-          <h2 className="auth-title">{mode === 'login' ? 'Sign in' : 'Create your account'}</h2>
+          <h2 className="auth-title">{mode === 'login' ? 'sign in.' : 'we have cookies (figurative).'}</h2>
           <p className="auth-subtitle">
-            {mode === 'login' ? '// authenticate to continue' : '// 30 seconds — no credit card'}
+            {mode === 'login' ? '// the algorithm missed you' : '// 30 sec setup. fr.'}
           </p>
           <form onSubmit={submit}>
             {mode === 'register' && (
               <div className="form-group">
                 <label className="form-label">Name</label>
-                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Jane Doe" data-testid="auth-input-name" />
+                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="goes by..." data-testid="auth-input-name" />
               </div>
             )}
             <div className="form-group">
               <label className="form-label">Email</label>
-              <input className="form-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@domain.com" data-testid="auth-input-email" />
+              <input className="form-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="you@unemployment.gov (jk)" data-testid="auth-input-email" />
             </div>
             <div className="form-group">
               <label className="form-label">Password</label>
               <input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder="••••••••" data-testid="auth-input-password" />
-              {mode === 'register' && <span className="form-hint">Minimum 6 characters.</span>}
+              {mode === 'register' && <span className="form-hint">6+ chars. don't reuse the one from that breach.</span>}
             </div>
             <div className="form-error" data-testid="auth-error">{error}</div>
             <button type="submit" className="btn-primary btn-block" disabled={busy} data-testid="auth-submit-btn">
-              {busy ? 'PROCESSING…' : mode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'} <ArrowRight size={14} />
+              {busy ? 'LOADING…' : mode === 'login' ? 'LOG ME IN' : 'YEET, MAKE ACCOUNT'} <ArrowRight size={14} />
             </button>
           </form>
           <div className="auth-footer">
             {mode === 'login'
-              ? <>No account? <a onClick={() => setMode('register')} data-testid="auth-switch-to-register">Create one →</a></>
-              : <>Already registered? <a onClick={() => setMode('login')} data-testid="auth-switch-to-login">Sign in →</a></>
+              ? <>new here? <a onClick={() => setMode('register')} data-testid="auth-switch-to-register">make an account →</a></>
+              : <>already on the grind? <a onClick={() => setMode('login')} data-testid="auth-switch-to-login">log in →</a></>
             }
           </div>
         </div>

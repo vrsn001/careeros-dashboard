@@ -366,3 +366,117 @@ class TestJobsImport:
             timeout=15,
         )
         assert r.status_code == 401
+
+
+# ---------- LinkedIn PDF Import ----------
+SAMPLE_PDF = "/tmp/fake_linkedin.pdf"
+
+
+class TestProfilePDFImport:
+    """POST /api/profile/import-pdf — uses a throwaway account so demo profile isn't mutated."""
+
+    @pytest.fixture(scope="class")
+    def throwaway_token(self, api):
+        email = f"TEST_pdf_{uuid.uuid4().hex[:8]}@example.com"
+        r = api.post(
+            f"{BASE_URL}/api/auth/register",
+            json={"email": email, "password": "secret123", "name": "PDF Tester"},
+            timeout=15,
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["token"]
+
+    @pytest.fixture(scope="class")
+    def tw_headers(self, throwaway_token):
+        return {"Authorization": f"Bearer {throwaway_token}"}
+
+    def test_import_pdf_requires_auth(self, api):
+        with open(SAMPLE_PDF, "rb") as f:
+            r = requests.post(
+                f"{BASE_URL}/api/profile/import-pdf",
+                files={"pdf": ("linkedin.pdf", f, "application/pdf")},
+                timeout=15,
+            )
+        assert r.status_code == 401, f"expected 401, got {r.status_code}: {r.text}"
+
+    def test_import_pdf_rejects_non_pdf(self, tw_headers):
+        files = {"pdf": ("notes.txt", b"this is not a pdf, just plain text content here.", "text/plain")}
+        r = requests.post(
+            f"{BASE_URL}/api/profile/import-pdf",
+            headers=tw_headers,
+            files=files,
+            timeout=15,
+        )
+        assert r.status_code == 400, r.text
+        msg = (r.json().get("detail") or "").lower()
+        assert "pdf" in msg, f"unexpected error msg: {msg}"
+
+    def test_import_pdf_rejects_tiny_file(self, tw_headers):
+        # < 200 bytes triggers the "suspiciously empty" branch.
+        # Use a valid-looking pdf header so it passes content-type check.
+        files = {"pdf": ("tiny.pdf", b"%PDF-1.4\n%tiny", "application/pdf")}
+        r = requests.post(
+            f"{BASE_URL}/api/profile/import-pdf",
+            headers=tw_headers,
+            files=files,
+            timeout=15,
+        )
+        assert r.status_code == 400, r.text
+
+    def test_import_pdf_valid_extracts_profile(self, api, tw_headers, throwaway_token):
+        with open(SAMPLE_PDF, "rb") as f:
+            r = requests.post(
+                f"{BASE_URL}/api/profile/import-pdf",
+                headers=tw_headers,
+                files={"pdf": ("linkedin.pdf", f, "application/pdf")},
+                timeout=90,
+            )
+        assert r.status_code == 200, f"{r.status_code}: {r.text}"
+        d = r.json()
+        # Top-level keys
+        assert "profile" in d and isinstance(d["profile"], dict)
+        assert "updated_keys" in d and isinstance(d["updated_keys"], list)
+        assert "raw_text_chars" in d and isinstance(d["raw_text_chars"], int)
+        assert d["raw_text_chars"] > 0
+        # Profile content
+        prof = d["profile"]
+        assert prof.get("name"), "profile.name missing"
+        assert prof.get("headline"), "profile.headline missing"
+        assert isinstance(prof.get("skills"), list) and len(prof["skills"]) > 0
+        assert prof.get("resume_text") and len(prof["resume_text"]) > 50
+        # Persistence: GET /api/profile should match
+        r2 = api.get(
+            f"{BASE_URL}/api/profile",
+            headers={"Authorization": f"Bearer {throwaway_token}"},
+            timeout=10,
+        )
+        assert r2.status_code == 200
+        assert r2.json().get("headline") == prof["headline"]
+
+
+# ---------- Full Data Export ----------
+class TestExport:
+    def test_export_requires_auth(self, api):
+        r = api.get(f"{BASE_URL}/api/export", timeout=10)
+        assert r.status_code == 401
+
+    def test_export_returns_full_payload(self, api, auth_headers):
+        r = api.get(f"{BASE_URL}/api/export", headers=auth_headers, timeout=15)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        # Required top-level keys
+        for k in ("exported_at", "user", "profile", "saved_jobs", "stats", "meta"):
+            assert k in d, f"missing key: {k}"
+        # user
+        assert d["user"].get("email") == DEMO_EMAIL
+        # profile non-empty for demo
+        assert d["profile"] and isinstance(d["profile"], dict)
+        assert d["profile"].get("skills")
+        # meta.version
+        assert d["meta"].get("version") == "3.2.0"
+        assert d["meta"].get("tool") == "CareerOS"
+        # saved_jobs is a list
+        assert isinstance(d["saved_jobs"], list)
+        # stats
+        assert "saved_jobs_count" in d["stats"]
+        assert d["stats"]["saved_jobs_count"] == len(d["saved_jobs"])

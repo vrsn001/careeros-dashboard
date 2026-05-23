@@ -38,16 +38,16 @@ export default function Saved() {
   async function updateStatus(id, newStatus) {
     try {
       await api.patch(`/saved-jobs/${id}`, { status: newStatus });
-      toast(`Status updated → ${newStatus}`, 'success');
+      toast(`status → ${newStatus}. character development.`, 'success');
       load();
     } catch (e) { toast(formatApiError(e), 'error'); }
   }
 
   async function remove(id) {
-    if (!window.confirm('Remove this job?')) return;
+    if (!window.confirm('remove this job? no take-backs.')) return;
     try {
       await api.delete(`/saved-jobs/${id}`);
-      toast('Removed', 'success');
+      toast('gone. next.', 'success');
       load();
     } catch (e) { toast(formatApiError(e), 'error'); }
   }
@@ -56,8 +56,8 @@ export default function Saved() {
     <section className="content-section" data-testid="saved-section">
       <div className="section-header">
         <div>
-          <h1 className="section-title">Saved Jobs</h1>
-          <p className="section-subtitle">// your tracked pipeline — {items.length} jobs</p>
+          <h1 className="section-title">saved jobs.</h1>
+          <p className="section-subtitle">// {items.length} role{items.length === 1 ? '' : 's'} on the list. now we wait. or apply. up to you.</p>
         </div>
         <button className="toolbar-action" onClick={load} disabled={loading} data-testid="saved-refresh-btn">
           <RefreshCw size={12} /> REFRESH
@@ -88,7 +88,7 @@ export default function Saved() {
       ) : items.length === 0 ? (
         <div className="empty-state" data-testid="saved-empty">
           <Briefcase size={40} />
-          <div>Nothing saved yet.<br />Head over to <strong style={{ color: 'var(--amber)' }}>Browse</strong> and start saving roles you like.</div>
+          <div>no saved jobs. probably for the best.<br />head to <strong style={{ color: 'var(--amber)' }}>browse</strong> and find something worth pretending to want.</div>
         </div>
       ) : (
         <div className="saved-jobs-grid" data-testid="saved-jobs-grid">

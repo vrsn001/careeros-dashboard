@@ -16,8 +16,9 @@ from typing import Annotated, Any, Optional
 import bcrypt
 import httpx
 import jwt
+import pdfplumber
 from bson import ObjectId
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Request, Response, status
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
@@ -702,6 +703,141 @@ def _extract_json(raw: str) -> Optional[dict]:
         return json.loads(m.group(0))
     except Exception:
         return None
+
+
+# ---------- LinkedIn PDF analyzer ----------
+MAX_PDF_BYTES = 8 * 1024 * 1024  # 8 MB
+
+
+def _extract_pdf_text(content: bytes) -> str:
+    """Extract text from a LinkedIn-exported PDF. Returns plain text or raises."""
+    import io
+    pieces: list[str] = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            if text:
+                pieces.append(text)
+    raw = "\n".join(pieces).strip()
+    raw = re.sub(r"\s*Page \d+ of \d+\s*", "\n", raw)
+    raw = re.sub(r"\n{3,}", "\n\n", raw)
+    return raw
+
+
+@app.post("/api/profile/import-pdf")
+async def import_profile_pdf(
+    user: CurrentUser,
+    pdf: UploadFile = File(..., description="LinkedIn profile PDF (max 8 MB)"),
+):
+    """
+    Upload a LinkedIn-exported PDF → extract text → ask Claude to structure it
+    into the user's profile. Saves to user.profile.
+    """
+    content_type = (pdf.content_type or "").lower()
+    if "pdf" not in content_type and not (pdf.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="bestie, that ain't a PDF")
+
+    content = await pdf.read()
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail=f"PDF too thicc (>{MAX_PDF_BYTES // 1024 // 1024} MB). Slim down.")
+    if len(content) < 200:
+        raise HTTPException(status_code=400, detail="that PDF is suspiciously empty. is your career too?")
+
+    try:
+        text = _extract_pdf_text(content)
+    except Exception as e:
+        log.exception("PDF extract failed")
+        raise HTTPException(status_code=400, detail=f"couldn't read that PDF: {type(e).__name__}")
+
+    if len(text) < 100:
+        raise HTTPException(status_code=400, detail="no text in PDF — is it scanned/image-only? we don't OCR yet.")
+
+    trimmed = text[:25000]
+
+    system = (
+        "You are an expert resume parser. Given raw LinkedIn-exported PDF text, "
+        "return STRICT JSON with this exact schema and nothing else:\n"
+        "{\n"
+        '  "name": "<full name or null>",\n'
+        '  "headline": "<current role/title — max 80 chars>",\n'
+        '  "location": "<city, country or null>",\n'
+        '  "bio": "<2-sentence elevator pitch in first person>",\n'
+        '  "skills": ["<skill>", ...up to 20],\n'
+        '  "preferred_roles": ["<inferred role>", ...up to 5],\n'
+        '  "preferred_locations": ["<city>", ...up to 3, include \"Remote\" if remote-friendly background],\n'
+        '  "resume_text": "<a clean ~600-1200 word resume narrative in first person, suitable for AI matching>"\n'
+        "}\n"
+        "Be honest. Do not invent jobs. If the PDF is short, summarize what's there."
+    )
+    prompt = f"LINKEDIN PDF TEXT:\n{trimmed}\n\nReturn the JSON now."
+    raw = await _claude_json(system, prompt, session_id=f"linkedin-{user['_id']}")
+    parsed = _extract_json(raw)
+    if not parsed or not isinstance(parsed, dict):
+        raise HTTPException(status_code=502, detail="AI couldn't read your vibe. try again?")
+
+    profile_update: dict[str, Any] = {}
+    for k in ("name", "headline", "location", "bio", "resume_text"):
+        v = parsed.get(k)
+        if isinstance(v, str) and v.strip():
+            profile_update[k] = v.strip()
+    for k in ("skills", "preferred_roles", "preferred_locations"):
+        v = parsed.get(k)
+        if isinstance(v, list):
+            cleaned = [str(x).strip() for x in v if isinstance(x, (str, int)) and str(x).strip()]
+            if cleaned:
+                profile_update[k] = cleaned[:20]
+
+    if not profile_update:
+        raise HTTPException(status_code=502, detail="AI returned nothing useful. mid PDF?")
+
+    await db.users.update_one(
+        {"_id": ObjectId(user["_id"])},
+        {"$set": {f"profile.{k}": v for k, v in profile_update.items()}},
+    )
+
+    fresh = await db.users.find_one({"_id": ObjectId(user["_id"])})
+    new_profile = (fresh or {}).get("profile") or {}
+
+    return {
+        "profile": new_profile,
+        "updated_keys": list(profile_update.keys()),
+        "raw_text_chars": len(text),
+    }
+
+
+# ---------- Full data export ----------
+@app.get("/api/export")
+async def export_my_data(user: CurrentUser):
+    """Download EVERYTHING we have on you. JSON dump."""
+    full_user = await db.users.find_one({"_id": ObjectId(user["_id"])})
+    if not full_user:
+        raise HTTPException(status_code=404, detail="who are you")
+
+    saved = []
+    async for d in db.saved_jobs.find({"user_id": user["_id"]}).sort("created_at", -1):
+        d.pop("user_id", None)
+        saved.append(_serialize(d))
+
+    return {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "user": {
+            "email": full_user.get("email"),
+            "name": full_user.get("name"),
+            "created_at": full_user.get("created_at").isoformat() if full_user.get("created_at") else None,
+        },
+        "profile": full_user.get("profile") or {},
+        "saved_jobs": saved,
+        "stats": {
+            "saved_jobs_count": len(saved),
+            "skills_count": len((full_user.get("profile") or {}).get("skills") or []),
+        },
+        "meta": {
+            "tool": "CareerOS",
+            "version": "3.2.0",
+            "note": "everything we got on you. no spooky shadow data. yw.",
+        },
+    }
+
 
 
 # ---------------------------------------------------------------- Root ----

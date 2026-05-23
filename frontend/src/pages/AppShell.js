@@ -41,7 +41,7 @@ export default function AppShell() {
             <span className="logo-icon">⬡</span>
             <div className="logo-text">
               <span className="logo-name">CareerOS</span>
-              <span className="logo-sub">v3.1.0</span>
+              <span className="logo-sub">v3.2.0</span>
             </div>
           </div>
         </div>
@@ -54,7 +54,7 @@ export default function AppShell() {
           <div className="profile-info">
             <h2 className="profile-name">{user?.name || user?.email}</h2>
             <p className="profile-role">{headline}</p>
-            <div className="profile-tags"><span className="tag tag-amber">Open to Work</span></div>
+            <div className="profile-tags"><span className="tag tag-amber">open to work · obvi</span></div>
           </div>
         </div>
         <nav className="sidebar-nav">
@@ -73,7 +73,7 @@ export default function AppShell() {
         </nav>
         <div className="sidebar-footer">
           <button className="btn-ghost" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => { logout(); nav('/'); }} data-testid="sidebar-logout-btn">
-            <LogOut size={14} /> Sign out
+            <LogOut size={14} /> log out · bye
           </button>
         </div>
       </aside>
