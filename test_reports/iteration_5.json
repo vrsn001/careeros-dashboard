@@ -1,0 +1,31 @@
+{
+  "summary": "Verified 3 new features: (1) LinkedIn-PDF onboarding via POST /api/auth/register-from-pdf, (2) company_logo (Clearbit fallback) + salary regex extraction on /jobs/search across remoteok/ycombinator/hackernews, (3) UI discoverability of LinkedIn PDF upload (Auth page button + dotted drop zone, Browse banner for users without resume, sidebar quick-action button, prominent remote/salary chips on job cards + modal). Backend: 33/33 pytest cases pass (added 6 new — 3 for register-from-pdf valid/duplicate/non-pdf, 3 for logos+salary across sources). Frontend e2e: PDF auth flow registers + parses + redirects to /app/browse in ~12s; non-PDF register path shows Browse banner; demo user banner correctly hidden; sidebar UPLOAD LINKEDIN PDF btn navigates to /app/profile; banner dismiss X removes banner; job modal shows quick-info with REMOTE + $50k-$80k + Location chips and company logo initial. All routes (Browse/Saved/Analytics/Profile) render without error-class DOM elements.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Browse — job cards", "issues": ["Many ERR_NAME_NOT_RESOLVED console warnings for Clearbit logo URLs (e.g. logo.clearbit.com/<bad-domain>). Image elements fail gracefully to initial-letter fallback so UX is unaffected, but it pollutes the console. Consider <img onError> swap to initial-only OR domain validation before constructing Clearbit URL."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "OPTIONAL: silence broken Clearbit logo 404s by adding onError handler that hides the <img> and shows the initial bubble (currently shown side-by-side or via fallback CSS — works visually but errors flood DevTools)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:275 register-from-pdf — creates user BEFORE Claude call succeeds. If Claude returns garbage JSON, the user account still exists with empty profile. That's acceptable (user can re-import later via /api/profile/import-pdf), but the response doesn't signal partial-failure. Consider including 'profile_parsed: false' in response when parsed is None so the frontend can surface a warning.",
+    "server.py:288 password ≥6 chars enforced both via Query(min_length=6) AND a manual check. Redundant — FastAPI will already 422 on min_length violation. Minor.",
+    "scrapers.py:77 _extract_salary regex looks for patterns like $120k-$160k. Effective for HN comments but won't match £/€ ranges or 'USD 120,000'. Sufficient for MVP since HN posts are US-centric.",
+    "scrapers.py:37 _clearbit_logo silently constructs URLs without checking if the domain resolves. Causes browser-side ERR_NAME_NOT_RESOLVED noise (see frontend_issues). Could be mitigated server-side via async HEAD probe but that adds latency/cost — onError client-side handler is the cleanest fix.",
+    "Browse.js — JobCard renders <img src={company_logo}> when populated. Recommend onError={(e)=>{e.currentTarget.style.display='none'}} so failed loads hide cleanly.",
+    "Auth.js — PDF mode persists email/password between modes (good UX). Submit button label correctly toggles between 'CREATE + PARSE PDF' and 'CREATE ACCOUNT'."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py (added TestRegisterFromPDF + TestJobLogosAndSalary — 6 new cases, now 33 total)"],
+  "success_rate": {"backend": "100% (33/33)", "frontend": "100% of tested flows"},
+  "test_credentials": "demo@careeros.io / demo1234. PDF-mutation tests use throwaway TEST_*@example.com accounts created via /api/auth/register and /api/auth/register-from-pdf. Demo profile NOT mutated.",
+  "seed_data_creation": "Each backend test run creates ~3 throwaway TEST_*@example.com users (generic register, PDF profile import, register-from-pdf valid + duplicate). Frontend e2e creates 2 more (pdfauth_<ts>@test.com via PDF flow, nopdf_<ts>@test.com via email flow). No cleanup; harmless dummies.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend regression at /app/backend/tests/backend_test.py is 33 cases. Sample PDF at /tmp/fake_linkedin.pdf (2.5KB, ~921 chars text). For frontend, the Auth PDF input has data-testid='auth-pdf-input' (display:none) — use page.set_input_files(...) directly on it. Demo user has resume_text so /app/browse banner is hidden for demo; to test banner, register a fresh user via plain email path. Job modal opens via 'Details + AI' button on each card. The Browse page renders 75 cards by default (~25 per source: remoteok+ycombinator+hackernews; wellfound is DataDome-blocked). PDF→Claude register-from-pdf takes ~10-12s end-to-end.",
+  "rca of the issue": "No issues. All three asks delivered correctly. Only cosmetic note: Clearbit logo URLs for some HN/scraped companies don't resolve, but UI degrades gracefully via initial-letter fallback. Recommend onError handler on <img> tags to silence DevTools noise."
+}

@@ -454,6 +454,93 @@ class TestProfilePDFImport:
         assert r2.json().get("headline") == prof["headline"]
 
 
+# ---------- Register From PDF ----------
+class TestRegisterFromPDF:
+    """POST /api/auth/register-from-pdf — combined account creation + LinkedIn PDF parsing."""
+
+    def test_register_from_pdf_valid(self, api):
+        email = f"TEST_regpdf_{uuid.uuid4().hex[:8]}@example.com"
+        with open(SAMPLE_PDF, "rb") as f:
+            r = requests.post(
+                f"{BASE_URL}/api/auth/register-from-pdf",
+                params={"email": email, "password": "secret123"},
+                files={"pdf": ("linkedin.pdf", f, "application/pdf")},
+                timeout=120,
+            )
+        assert r.status_code == 200, f"{r.status_code}: {r.text}"
+        d = r.json()
+        assert "token" in d and isinstance(d["token"], str) and len(d["token"]) > 10
+        assert "user" in d and d["user"]["email"] == email.lower()
+        assert "updated_keys" in d and isinstance(d["updated_keys"], list)
+        assert "raw_text_chars" in d and isinstance(d["raw_text_chars"], int)
+        assert d["raw_text_chars"] > 0
+        assert "password_hash" not in d["user"]
+        # /me with returned token should resolve
+        me = api.get(f"{BASE_URL}/api/auth/me", headers={"Authorization": f"Bearer {d['token']}"}, timeout=10)
+        assert me.status_code == 200
+        assert me.json()["email"] == email.lower()
+
+    def test_register_from_pdf_duplicate_email(self, api):
+        # First registration via normal /register
+        email = f"TEST_dupe_{uuid.uuid4().hex[:8]}@example.com"
+        r0 = api.post(f"{BASE_URL}/api/auth/register", json={"email": email, "password": "secret123"}, timeout=15)
+        assert r0.status_code == 200, r0.text
+        # Now attempt register-from-pdf with same email → 400
+        with open(SAMPLE_PDF, "rb") as f:
+            r = requests.post(
+                f"{BASE_URL}/api/auth/register-from-pdf",
+                params={"email": email, "password": "secret123"},
+                files={"pdf": ("linkedin.pdf", f, "application/pdf")},
+                timeout=30,
+            )
+        assert r.status_code == 400, r.text
+        assert "already" in (r.json().get("detail") or "").lower()
+
+    def test_register_from_pdf_non_pdf(self):
+        email = f"TEST_nonpdf_{uuid.uuid4().hex[:8]}@example.com"
+        r = requests.post(
+            f"{BASE_URL}/api/auth/register-from-pdf",
+            params={"email": email, "password": "secret123"},
+            files={"pdf": ("notes.txt", b"this is not a pdf file" * 30, "text/plain")},
+            timeout=15,
+        )
+        assert r.status_code == 400, r.text
+
+
+# ---------- Logos + Salary on /jobs/search ----------
+class TestJobLogosAndSalary:
+    def test_company_logo_field_present(self, search_payload):
+        d = search_payload
+        for src in ["remoteok", "ycombinator", "hackernews"]:
+            jobs = d["by_source"].get(src) or []
+            assert jobs, f"no jobs for {src}"
+            for j in jobs[:5]:
+                assert "company_logo" in j, f"{src} job missing company_logo key"
+                assert "remote" in j
+                assert "salary" in j
+                assert "location" in j
+
+    def test_yc_and_hn_have_logos(self, search_payload):
+        d = search_payload
+        for src in ["ycombinator", "hackernews"]:
+            jobs = d["by_source"].get(src) or []
+            logos = [j.get("company_logo") for j in jobs if j.get("company_logo")]
+            assert len(logos) > 0, f"{src} has no jobs with company_logo populated"
+
+    def test_hackernews_has_some_salaries(self, api):
+        r = api.get(f"{BASE_URL}/api/jobs/search", params={"sources": "hackernews", "per_source": 30}, timeout=90)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        jobs = d["by_source"].get("hackernews") or []
+        assert jobs, "no HN jobs returned"
+        with_salary = [j for j in jobs if j.get("salary")]
+        # Soft check: at least 1 — depends on HN thread content. Don't hard-fail.
+        if len(with_salary) == 0:
+            pytest.skip("Current HN thread has no salary-bearing posts (not a code bug)")
+        for j in with_salary[:3]:
+            assert isinstance(j["salary"], str) and len(j["salary"]) > 0
+
+
 # ---------- Full Data Export ----------
 class TestExport:
     def test_export_requires_auth(self, api):

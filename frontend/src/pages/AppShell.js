@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bookmark, Briefcase, BarChart2, User as UserIcon, LogOut,
-  Bell, Menu, Compass,
+  Bell, Menu, Compass, Linkedin,
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 
@@ -72,6 +72,20 @@ export default function AppShell() {
           ))}
         </nav>
         <div className="sidebar-footer">
+          <button
+            onClick={() => nav('/app/profile')}
+            data-testid="sidebar-linkedin-btn"
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px', borderRadius: 'var(--radius)',
+              background: '#0a66c2', color: '#fff', border: '1px solid #0a66c2',
+              fontSize: 11, fontWeight: 700, fontFamily: 'var(--font-mono)',
+              letterSpacing: 0.5, cursor: 'pointer',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Linkedin size={14} /> UPLOAD LINKEDIN PDF
+          </button>
           <button className="btn-ghost" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={() => { logout(); nav('/'); }} data-testid="sidebar-logout-btn">
             <LogOut size={14} /> log out · bye
           </button>

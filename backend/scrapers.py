@@ -33,6 +33,73 @@ DEFAULT_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
+
+def _clearbit_logo(domain: str | None) -> str | None:
+    """Return a Clearbit Logo API URL for a given domain (no API key needed)."""
+    if not domain:
+        return None
+    domain = domain.strip().lower()
+    domain = re.sub(r"^https?://", "", domain)
+    domain = re.sub(r"^www\.", "", domain)
+    domain = domain.split("/", 1)[0]
+    if "." not in domain:
+        return None
+    return f"https://logo.clearbit.com/{domain}"
+
+
+def _domain_from_text(text: str) -> str | None:
+    """Find a plausible company domain in a chunk of text/HTML."""
+    if not text:
+        return None
+    # Prefer the first http(s) URL whose host isn't a generic recruiter
+    m = re.findall(r"https?://([^\s<>\"'/]+)", text)
+    skip = {
+        "news.ycombinator.com", "jobs.ashbyhq.com", "lever.co", "greenhouse.io",
+        "boards.greenhouse.io", "jobs.lever.co", "linkedin.com", "wellfound.com",
+        "angel.co", "twitter.com", "x.com", "remoteok.com", "remoteok.io",
+        "github.com", "youtube.com", "facebook.com", "instagram.com",
+    }
+    for host in m:
+        host_norm = re.sub(r"^www\.", "", host).lower()
+        if host_norm in skip:
+            continue
+        return host_norm
+    return None
+
+
+# Common salary pattern, e.g. "$120k-$160k", "$120,000 - $160,000", "USD 100-140K"
+_SALARY_RE = re.compile(
+    r"(?:\$|USD\s?|EUR\s?|€|£|INR\s?|₹)\s?(\d{2,3}(?:[,.]\d{3})?)\s?[Kk]?\s?(?:[-–to]+\s?)(?:\$|USD\s?|EUR\s?|€|£|INR\s?|₹)?\s?(\d{2,3}(?:[,.]\d{3})?)\s?[Kk]?",
+    re.I,
+)
+
+
+def _extract_salary(text: str) -> str | None:
+    if not text:
+        return None
+    m = _SALARY_RE.search(text)
+    if not m:
+        return None
+    lo, hi = m.group(1), m.group(2)
+    raw = m.group(0)
+    # Detect currency
+    cur = "$"
+    if "€" in raw or "EUR" in raw.upper():
+        cur = "€"
+    elif "£" in raw:
+        cur = "£"
+    elif "₹" in raw or "INR" in raw.upper():
+        cur = "₹"
+
+    def _norm(n: str) -> str:
+        n = n.replace(",", "").replace(".", "")
+        # If already has k indicator from raw, keep; else infer
+        if int(n) >= 1000:
+            return f"{int(n) // 1000}k"
+        return f"{n}k"
+    return f"{cur}{_norm(lo)}–{cur}{_norm(hi)}"
+
+
 # ---------------------------------------------------------------- RemoteOK ----
 async def scrape_remoteok(query: str = "", limit: int = 60) -> list[dict[str, Any]]:
     """RemoteOK exposes a public JSON feed at https://remoteok.com/api."""
@@ -81,12 +148,18 @@ async def scrape_remoteok(query: str = "", limit: int = 60) -> list[dict[str, An
         desc = BeautifulSoup(desc_raw, "lxml").get_text(" ", strip=True)
         desc = re.sub(r"\s+", " ", desc)[:1200]
 
+        # Resolve company logo: source-provided → Clearbit fallback via company URL
+        logo = j.get("company_logo") or j.get("logo")
+        if not logo:
+            domain = _domain_from_text(j.get("url") or j.get("apply_url") or j.get("company_url") or "")
+            logo = _clearbit_logo(domain)
+
         out.append({
             "source": "remoteok",
             "external_id": f"remoteok-{j.get('id') or j.get('slug')}",
             "title": title,
             "company": company,
-            "company_logo": j.get("company_logo") or j.get("logo"),
+            "company_logo": logo,
             "location": _fix_mojibake(j.get("location") or "Remote"),
             "remote": True,
             "tags": tags,
@@ -151,7 +224,7 @@ async def scrape_yc(query: str = "", limit: int = 60) -> list[dict[str, Any]]:
             "external_id": f"yc-{c.get('id') or slug}",
             "title": title,
             "company": name,
-            "company_logo": c.get("small_logo_thumb_url"),
+            "company_logo": c.get("small_logo_thumb_url") or _clearbit_logo(c.get("website")),
             "location": locations or "—",
             "remote": remote,
             "tags": tags,
@@ -267,16 +340,23 @@ async def scrape_hackernews(query: str = "", limit: int = 60) -> list[dict[str, 
         apply_url_match = re.search(r"https?://[^\s<>\"']+", text)
         apply_url = apply_url_match.group(0) if apply_url_match else f"https://news.ycombinator.com/item?id={c['id']}"
 
+        # Try to derive a company logo from the first non-recruiter URL in the post
+        domain = _domain_from_text(text)
+        logo = _clearbit_logo(domain)
+
+        # Try to extract salary from the post body
+        salary = _extract_salary(text)
+
         out.append({
             "source": "hackernews",
             "external_id": f"hn-{c['id']}",
             "title": title,
             "company": company,
-            "company_logo": None,
+            "company_logo": logo,
             "location": location,
             "remote": remote,
             "tags": tags,
-            "salary": None,
+            "salary": salary,
             "description": text[:1500],
             "apply_url": apply_url,
             "posted_at": (

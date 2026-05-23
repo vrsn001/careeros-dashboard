@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Search, RefreshCw, ExternalLink, BookmarkPlus, Sparkles, MapPin, Briefcase, Wallet, X, Copy, Globe, Wand2, Link2, ArrowUpDown,
+  Search, RefreshCw, ExternalLink, BookmarkPlus, Sparkles, MapPin, Briefcase, Wallet, X, Copy, Globe, Wand2, Link2, ArrowUpDown, Linkedin,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api, { formatApiError } from '../api';
+import { useAuth } from '../AuthContext';
 import { useToast } from '../Toast';
 
 const ALL_SOURCES = [
@@ -14,6 +16,9 @@ const ALL_SOURCES = [
 
 export default function Browse() {
   const toast = useToast();
+  const nav = useNavigate();
+  const { user } = useAuth();
+  const profileMissing = !user?.profile?.resume_text;
   const [query, setQuery] = useState('');
   const [activeSources, setActiveSources] = useState(ALL_SOURCES.map((s) => s.id));
   const [data, setData] = useState(null);
@@ -25,6 +30,7 @@ export default function Browse() {
   const [ranking, setRanking] = useState(false);
   const [sortByScore, setSortByScore] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   async function fetchJobs(opts = {}) {
     setLoading(true);
@@ -141,6 +147,43 @@ export default function Browse() {
         </div>
       </div>
 
+      {/* LinkedIn PDF prompt banner — shown when profile has no resume */}
+      {profileMissing && !bannerDismissed && (
+        <div
+          data-testid="browse-linkedin-banner"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: 16,
+            background: 'linear-gradient(135deg, var(--cyan-dim) 0%, var(--purple-dim) 100%)',
+            border: '1px solid var(--cyan-glow)', borderRadius: 'var(--radius-md)',
+            marginBottom: 20, position: 'relative', overflow: 'hidden',
+          }}
+        >
+          <Linkedin size={28} style={{ color: '#0a66c2', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>upload your LinkedIn PDF to unlock AI matching.</div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              right now scores are mid because we don't know you. LinkedIn → More → Save to PDF → drop it in profile. 10 sec.
+            </div>
+          </div>
+          <button
+            className="btn-primary"
+            onClick={() => nav('/app/profile')}
+            data-testid="browse-banner-cta"
+            style={{ background: '#0a66c2', color: '#fff', borderColor: '#0a66c2', flexShrink: 0 }}
+          >
+            <Linkedin size={12} /> UPLOAD PDF
+          </button>
+          <button
+            onClick={() => setBannerDismissed(true)}
+            data-testid="browse-banner-dismiss"
+            style={{ background: 'transparent', color: 'var(--text-muted)', padding: 4, flexShrink: 0 }}
+            aria-label="Dismiss"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="toolbar">
         <div className="search-bar" data-testid="browse-search-bar">
           <Search size={14} />
@@ -224,6 +267,7 @@ function scoreColor(s) {
 
 function JobCard({ job, saved, onSave, onOpen, score }) {
   const col = score ? scoreColor(score.score) : null;
+  const hasRealLocation = job.location && job.location !== '—' && job.location.toLowerCase() !== 'remote';
   return (
     <div className="job-card" data-testid={`job-card-${job.external_id}`} style={score ? { boxShadow: `inset 3px 0 0 ${col}` } : undefined}>
       {score && (
@@ -233,7 +277,7 @@ function JobCard({ job, saved, onSave, onOpen, score }) {
       )}
       <div className="job-card-header" style={score ? { paddingRight: 60 } : undefined}>
         <div className="job-logo">
-          {job.company_logo ? <img src={job.company_logo} alt="" onError={(e) => { e.target.style.display = 'none'; }} /> : (job.company?.[0] || '?').toUpperCase()}
+          {job.company_logo ? <img src={job.company_logo} alt={job.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (job.company?.[0] || '?').toUpperCase() })); }} /> : (job.company?.[0] || '?').toUpperCase()}
         </div>
         <div className="job-header-info">
           <div className="job-title" onClick={onOpen} style={{ cursor: 'pointer' }} data-testid={`job-title-${job.external_id}`}>{job.title}</div>
@@ -246,13 +290,24 @@ function JobCard({ job, saved, onSave, onOpen, score }) {
           {score.one_liner}
         </div>
       )}
+
+      {/* PROMINENT salary + remote chips */}
+      <div className="job-quick-info" data-testid={`job-quick-info-${job.external_id}`}>
+        <span className={`info-chip ${job.remote ? 'info-chip-remote' : 'info-chip-onsite'}`} data-testid={`job-remote-${job.external_id}`}>
+          <Globe size={11} /> {job.remote ? 'REMOTE' : 'ONSITE'}
+        </span>
+        <span className={`info-chip ${job.salary ? 'info-chip-salary' : 'info-chip-nosalary'}`} data-testid={`job-salary-${job.external_id}`}>
+          <Wallet size={11} /> {job.salary || 'salary undisclosed'}
+        </span>
+        {hasRealLocation && (
+          <span className="info-chip info-chip-location" data-testid={`job-location-${job.external_id}`}>
+            <MapPin size={11} /> {job.location.slice(0, 28)}
+          </span>
+        )}
+      </div>
+
       <div className="job-tags">
         {(job.tags || []).slice(0, 5).map((t, i) => <span key={`${t}-${i}`} className="job-tag">{t}</span>)}
-      </div>
-      <div className="job-meta">
-        <span className="job-meta-item"><MapPin size={11} />{job.location || '—'}</span>
-        {job.remote && <span className="job-meta-item"><Globe size={11} />Remote</span>}
-        {job.salary && <span className="job-meta-item job-salary"><Wallet size={11} />{job.salary}</span>}
       </div>
       {job.description && <div className="job-description">{job.description}</div>}
       <div className="job-actions">
@@ -319,11 +374,29 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
           <X size={18} />
         </button>
         <div className="modal-header">
-          <div className="modal-title" data-testid="job-modal-title">{job.title}</div>
-          <div className="modal-sub">
-            {job.company} · <span className={`job-source-badge src-${job.source}`} style={{ marginLeft: 6 }}>{job.source}</span>
-            {job.location && <> · {job.location}</>}
-            {job.salary && <> · <span style={{ color: 'var(--emerald)' }}>{job.salary}</span></>}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 8 }}>
+            <div className="job-logo" style={{ width: 52, height: 52, fontSize: 18 }}>
+              {job.company_logo
+                ? <img src={job.company_logo} alt={job.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (job.company?.[0] || '?').toUpperCase() })); }} />
+                : (job.company?.[0] || '?').toUpperCase()}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="modal-title" data-testid="job-modal-title">{job.title}</div>
+              <div className="modal-sub">
+                {job.company} · <span className={`job-source-badge src-${job.source}`} style={{ marginLeft: 6 }}>{job.source}</span>
+              </div>
+            </div>
+          </div>
+          <div className="job-quick-info" style={{ marginTop: 6 }} data-testid="job-modal-quick-info">
+            <span className={`info-chip ${job.remote ? 'info-chip-remote' : 'info-chip-onsite'}`} data-testid="job-modal-remote-chip">
+              <Globe size={11} /> {job.remote ? 'REMOTE' : 'ONSITE'}
+            </span>
+            <span className={`info-chip ${job.salary ? 'info-chip-salary' : 'info-chip-nosalary'}`} data-testid="job-modal-salary-chip">
+              <Wallet size={11} /> {job.salary || 'salary not disclosed'}
+            </span>
+            <span className="info-chip info-chip-location" data-testid="job-modal-location-chip">
+              <MapPin size={11} /> {job.location || 'location unknown'}
+            </span>
           </div>
         </div>
 

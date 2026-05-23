@@ -272,6 +272,107 @@ async def login(body: LoginIn):
     return {"token": token, "user": user}
 
 
+@app.post("/api/auth/register-from-pdf")
+async def register_from_pdf(
+    pdf: UploadFile = File(..., description="LinkedIn PDF"),
+    email: str = Query(..., description="Email for the new account"),
+    password: str = Query(..., min_length=6, description="Password ≥6 chars"),
+):
+    """
+    'Continue with LinkedIn' onboarding: in one shot, create an account AND
+    parse the uploaded LinkedIn PDF into the profile.
+    """
+    email_norm = email.lower().strip()
+    if not email_norm or "@" not in email_norm:
+        raise HTTPException(status_code=400, detail="Invalid email")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be 6+ chars")
+    if await db.users.find_one({"email": email_norm}):
+        raise HTTPException(status_code=400, detail="Email already registered. Try logging in.")
+
+    content_type = (pdf.content_type or "").lower()
+    if "pdf" not in content_type and not (pdf.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="bestie, that ain't a PDF")
+
+    content = await pdf.read()
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail=f"PDF too thicc (>{MAX_PDF_BYTES // 1024 // 1024} MB)")
+    if len(content) < 200:
+        raise HTTPException(status_code=400, detail="that PDF is suspiciously empty bestie")
+
+    try:
+        text = _extract_pdf_text(content)
+    except Exception as e:
+        log.exception("PDF extract failed")
+        raise HTTPException(status_code=400, detail=f"couldn't read that PDF: {type(e).__name__}") from e
+
+    if not text or len(text) < 100:
+        raise HTTPException(status_code=400, detail="no text in PDF — is it scanned/image-only?")
+
+    # Create user first so the AI session_id is real
+    doc = {
+        "email": email_norm,
+        "password_hash": hash_password(password),
+        "name": email_norm.split("@")[0],
+        "role": "user",
+        "created_at": datetime.now(timezone.utc),
+        "profile": {},
+    }
+    res = await db.users.insert_one(doc)
+    user_id = res.inserted_id
+
+    trimmed = text[:25000]
+    system = (
+        "You are an expert resume parser. Given raw LinkedIn-exported PDF text, "
+        "return STRICT JSON with this exact schema and nothing else:\n"
+        '{ "name": "<full name>", "headline": "<title — max 80>", "location": "<city, country>", '
+        '"bio": "<2-sentence first-person elevator pitch>", '
+        '"skills": ["<skill>", ...up to 20], '
+        '"preferred_roles": ["<role>", ...up to 5], '
+        '"preferred_locations": ["<city>", ...up to 3], '
+        '"resume_text": "<600-1200 word first-person resume narrative>" }\n'
+        "Be honest. Do not invent jobs."
+    )
+    prompt = f"LINKEDIN PDF TEXT:\n{trimmed}\n\nReturn JSON now."
+    try:
+        raw = await _claude_json(system, prompt, session_id=f"linkedin-{user_id}")
+        parsed = _extract_json(raw)
+    except Exception:
+        parsed = None
+
+    profile_update: dict[str, Any] = {}
+    if isinstance(parsed, dict):
+        for k in ("name", "headline", "location", "bio", "resume_text"):
+            v = parsed.get(k)
+            if isinstance(v, str) and v.strip():
+                profile_update[k] = v.strip()
+        for k in ("skills", "preferred_roles", "preferred_locations"):
+            v = parsed.get(k)
+            if isinstance(v, list):
+                cleaned = [str(x).strip() for x in v if isinstance(x, (str, int)) and str(x).strip()]
+                if cleaned:
+                    profile_update[k] = cleaned[:20]
+
+    set_fields = {f"profile.{k}": v for k, v in profile_update.items()}
+    if profile_update.get("name"):
+        set_fields["name"] = profile_update["name"]  # also update top-level name
+    if set_fields:
+        await db.users.update_one({"_id": user_id}, {"$set": set_fields})
+
+    fresh = await db.users.find_one({"_id": user_id})
+    if not fresh:
+        raise HTTPException(status_code=500, detail="account created but disappeared somehow??")
+    token = create_access_token(user_id, email_norm)
+    fresh["_id"] = str(fresh["_id"])
+    fresh.pop("password_hash", None)
+    return {
+        "token": token,
+        "user": fresh,
+        "updated_keys": list(profile_update.keys()),
+        "raw_text_chars": len(text),
+    }
+
+
 @app.get("/api/auth/me")
 async def me(user: CurrentUser):
     return user

@@ -96,7 +96,9 @@ export default function Saved() {
             <div key={j._id} className="job-card" data-testid={`saved-card-${j._id}`}>
               <div className="job-card-header">
                 <div className="job-logo">
-                  {j.company_logo ? <img src={j.company_logo} alt="" onError={(e) => { e.target.style.display = 'none'; }} /> : (j.company?.[0] || '?').toUpperCase()}
+                  {j.company_logo
+                    ? <img src={j.company_logo} alt={j.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (j.company?.[0] || '?').toUpperCase() })); }} />
+                    : (j.company?.[0] || '?').toUpperCase()}
                 </div>
                 <div className="job-header-info">
                   <div className="job-title">{j.title}</div>
@@ -104,15 +106,21 @@ export default function Saved() {
                 </div>
                 <span className={`job-source-badge src-${j.status}`}>{j.status?.toUpperCase()}</span>
               </div>
+              <div className="job-quick-info">
+                <span className={`info-chip ${j.remote ? 'info-chip-remote' : 'info-chip-onsite'}`}>
+                  <Globe size={11} /> {j.remote ? 'REMOTE' : 'ONSITE'}
+                </span>
+                <span className={`info-chip ${j.salary ? 'info-chip-salary' : 'info-chip-nosalary'}`}>
+                  <Wallet size={11} /> {j.salary || 'no salary'}
+                </span>
+                <span className="info-chip info-chip-location">
+                  <MapPin size={11} /> {(j.location || '—').slice(0, 24)}
+                </span>
+              </div>
               <div className="job-tags">
                 {(j.tags || []).slice(0, 5).map((t, i) => <span key={`${t}-${i}`} className="job-tag">{t}</span>)}
               </div>
-              <div className="job-meta">
-                <span className="job-meta-item"><MapPin size={11} />{j.location || '—'}</span>
-                {j.remote && <span className="job-meta-item"><Globe size={11} />Remote</span>}
-                {j.salary && <span className="job-meta-item job-salary"><Wallet size={11} />{j.salary}</span>}
-                <span className="job-meta-item" style={{ marginLeft: 'auto' }}>{j.source}</span>
-              </div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', marginBottom: 6, letterSpacing: 0.5 }}>via {j.source}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, paddingTop: 10, borderTop: '1px solid var(--border-dim)' }}>
                 <select className="form-select" style={{ padding: '6px 10px', fontSize: 10, width: 'auto', flex: 1 }} value={j.status} onChange={(e) => updateStatus(j._id, e.target.value)} data-testid={`saved-status-select-${j._id}`}>
                   <option value="saved">SAVED</option>
