@@ -34,9 +34,16 @@
 - ✅ All endpoints prefixed `/api`, all interactive elements tagged with `data-testid`
 - ✅ Pre-seeded demo user (demo@careeros.io / demo1234) with full profile for instant AI testing
 
-## What's implemented (May 23, 2026 — P0 iteration)
-- ✅ **Bulk AI Rank** (`POST /api/ai/rank`): one Claude call scores up to 60 jobs at once; UI shows sparkle+score badge per card + colored one-line reason + "SORT BY SCORE" toggle that puts highest-match roles first
-- ✅ **Wellfound URL import** (`POST /api/jobs/import`): paste a wellfound.com/jobs/… URL → parses `__NEXT_DATA__` → preview → save in one click. DataDome blocks bubble up as a clear error with "Open Original" fallback.
+## What's implemented (May 23, 2026 — Gen Z drop)
+- ✅ **LinkedIn PDF Analyzer** (`POST /api/profile/import-pdf`): drag-drop / upload a LinkedIn-exported PDF → `pdfplumber` extracts text → Claude parses into structured profile (name, headline, location, bio, skills, preferred roles/locations, full resume narrative). Auto-fills the entire Profile form. 8 MB cap.
+- ✅ **Full data export** (`GET /api/export`): one click downloads `careeros-export-YYYY-MM-DD.json` with everything CareerOS knows about you (user, profile, all saved jobs + statuses + notes, stats).
+- ✅ **Gen Z / Tyler Durden copy refresh** across every screen — sarcastic, self-aware, focused on the chronically unhirable. Examples:
+  - Landing: *"Stop applying to jobs that ghost you before the interview."*
+  - Auth: *"Welcome back, you magnificent disaster."*
+  - AI rank button: *"GHOST CHECK"*  · cover letter button: *"BEG WITH STYLE"*
+  - Saved empty: *"no saved jobs. probably for the best."*
+  - Analytics title: *"the funnel of cope."*
+- ✅ Tagline on landing: *"The first rule of CareerOS: you do not beg companies that don't want you. — probably tyler durden, if he was unemployed in 2026"*
 
 ## Backlog / next iterations
 ### P0
