@@ -747,9 +747,9 @@ async def import_profile_pdf(
         text = _extract_pdf_text(content)
     except Exception as e:
         log.exception("PDF extract failed")
-        raise HTTPException(status_code=400, detail=f"couldn't read that PDF: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail=f"couldn't read that PDF: {type(e).__name__}") from e
 
-    if len(text) < 100:
+    if not text or len(text) < 100:
         raise HTTPException(status_code=400, detail="no text in PDF — is it scanned/image-only? we don't OCR yet.")
 
     trimmed = text[:25000]

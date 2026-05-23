@@ -247,7 +247,7 @@ function JobCard({ job, saved, onSave, onOpen, score }) {
         </div>
       )}
       <div className="job-tags">
-        {(job.tags || []).slice(0, 5).map((t, i) => <span key={i} className="job-tag">{t}</span>)}
+        {(job.tags || []).slice(0, 5).map((t, i) => <span key={`${t}-${i}`} className="job-tag">{t}</span>)}
       </div>
       <div className="job-meta">
         <span className="job-meta-item"><MapPin size={11} />{job.location || '—'}</span>
@@ -327,7 +327,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
           </div>
         </div>
 
-        <div className="job-tags">{(job.tags || []).map((t, i) => <span key={i} className="job-tag">{t}</span>)}</div>
+        <div className="job-tags">{(job.tags || []).map((t, i) => <span key={`${t}-${i}`} className="job-tag">{t}</span>)}</div>
 
         {job.description && (
           <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', maxHeight: 240, overflowY: 'auto', padding: 12, background: 'var(--bg-200)', borderRadius: 4, border: '1px solid var(--border-dim)' }} data-testid="job-modal-description">
@@ -373,7 +373,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
               {match.gaps?.length > 0 && (
                 <>
                   <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 6 }}>GAPS TO CLOSE</div>
-                  <ul className="match-gaps">{match.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul>
+                  <ul className="match-gaps">{match.gaps.map((g, i) => <li key={`gap-${i}`}>{g}</li>)}</ul>
                 </>
               )}
               {match.next_steps && <div className="match-next">→ {match.next_steps}</div>}

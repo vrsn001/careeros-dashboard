@@ -105,7 +105,7 @@ export default function Saved() {
                 <span className={`job-source-badge src-${j.status}`}>{j.status?.toUpperCase()}</span>
               </div>
               <div className="job-tags">
-                {(j.tags || []).slice(0, 5).map((t, i) => <span key={i} className="job-tag">{t}</span>)}
+                {(j.tags || []).slice(0, 5).map((t, i) => <span key={`${t}-${i}`} className="job-tag">{t}</span>)}
               </div>
               <div className="job-meta">
                 <span className="job-meta-item"><MapPin size={11} />{j.location || '—'}</span>
