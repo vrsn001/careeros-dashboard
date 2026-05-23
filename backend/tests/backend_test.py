@@ -372,6 +372,44 @@ class TestJobsImport:
 SAMPLE_PDF = "/tmp/fake_linkedin.pdf"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ensure_sample_pdf():
+    """Generate the sample LinkedIn PDF if it's missing (cleaned up by /tmp lifecycle)."""
+    if os.path.exists(SAMPLE_PDF) and os.path.getsize(SAMPLE_PDF) > 1000:
+        return
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas as rl_canvas
+    except ImportError:
+        pytest.skip("reportlab not installed; sample PDF cannot be generated")
+    c = rl_canvas.Canvas(SAMPLE_PDF, pagesize=letter)
+    lines = [
+        "Alex Rivera",
+        "Senior Frontend Engineer - React, TypeScript, GraphQL",
+        "Austin, TX",
+        "",
+        "Summary: Frontend engineer with 7 years building production React apps.",
+        "Led the UI rewrite at FintechCorp serving 35k+ traders.",
+        "",
+        "Experience:",
+        "Senior Frontend Engineer - FintechCorp - 2022-Present",
+        "Built realtime websocket-based trading dashboard.",
+        "Frontend Engineer - DataSaaS - 2019-2022",
+        "Built customer dashboards in React + D3.",
+        "",
+        "Skills: React, TypeScript, JavaScript, Next.js, GraphQL, Apollo,",
+        "Node.js, CSS, Tailwind, Webpack, Vite, Jest, Cypress, Storybook,",
+        "AWS, Docker, Design Systems, Mentoring",
+        "",
+        "Education: BS Computer Science, UT Austin, 2018",
+    ]
+    y = 750
+    for line in lines:
+        c.drawString(72, y, line)
+        y -= 18
+    c.save()
+
+
 class TestProfilePDFImport:
     """POST /api/profile/import-pdf — uses a throwaway account so demo profile isn't mutated."""
 

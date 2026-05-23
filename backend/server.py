@@ -300,6 +300,7 @@ async def register_from_pdf(
     if len(content) < 200:
         raise HTTPException(status_code=400, detail="that PDF is suspiciously empty bestie")
 
+    text: str = ""
     try:
         text = _extract_pdf_text(content)
     except Exception as e:
@@ -845,6 +846,7 @@ async def import_profile_pdf(
     if len(content) < 200:
         raise HTTPException(status_code=400, detail="that PDF is suspiciously empty. is your career too?")
 
+    text: str = ""
     try:
         text = _extract_pdf_text(content)
     except Exception as e:
