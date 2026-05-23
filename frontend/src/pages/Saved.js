@@ -3,6 +3,12 @@ import { Trash2, ExternalLink, Briefcase, MapPin, Wallet, Globe, RefreshCw } fro
 import api, { formatApiError } from '../api';
 import { useToast } from '../Toast';
 
+function LogoImg({ src, company }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return <>{(company?.[0] || '?').toUpperCase()}</>;
+  return <img src={src} alt={company} onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: 3 }} />;
+}
+
 const STATUSES = [
   { id: 'all', label: 'ALL' },
   { id: 'saved', label: 'SAVED' },
@@ -96,9 +102,7 @@ export default function Saved() {
             <div key={j._id} className="job-card" data-testid={`saved-card-${j._id}`}>
               <div className="job-card-header">
                 <div className="job-logo">
-                  {j.company_logo
-                    ? <img src={j.company_logo} alt={j.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (j.company?.[0] || '?').toUpperCase() })); }} />
-                    : (j.company?.[0] || '?').toUpperCase()}
+                  <LogoImg src={j.company_logo} company={j.company} />
                 </div>
                 <div className="job-header-info">
                   <div className="job-title">{j.title}</div>

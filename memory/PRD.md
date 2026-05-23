@@ -34,6 +34,17 @@
 - ✅ All endpoints prefixed `/api`, all interactive elements tagged with `data-testid`
 - ✅ Pre-seeded demo user (demo@careeros.io / demo1234) with full profile for instant AI testing
 
+## What's implemented (May 23, 2026 — visibility + onboarding drop)
+- ✅ **Prominent salary + remote chips** on every job card (Browse + Saved) and inside the job modal — green REMOTE / gray ONSITE, amber salary pill / muted "salary undisclosed", cyan location pill (hidden when redundant with REMOTE)
+- ✅ **Company logos** via source-provided URLs + Clearbit Logo API fallback for YC (via website domain) and Hacker News (via first non-recruiter URL in post). Graceful `<LogoImg>` component falls back to initial bubble on 404
+- ✅ **Salary regex extraction** for Hacker News posts (`$120k-$160k`, `USD 100-140K`, EUR/£/₹ supported)
+- ✅ **"Continue with LinkedIn PDF"** signup flow:
+  - Prominent blue button on /auth?mode=register above the email form
+  - Dotted drag-drop zone, instant account + profile creation in one step via new `POST /api/auth/register-from-pdf` endpoint
+  - Returns `profile_parsed: true/false` flag for partial-failure handling
+- ✅ **Browse banner** prompting LinkedIn PDF upload when profile has no resume_text. Dismissible per session.
+- ✅ **Sidebar quick-action**: blue "UPLOAD LINKEDIN PDF" button visible on every screen, navigates to /app/profile
+
 ## What's implemented (May 23, 2026 — Gen Z drop)
 - ✅ **LinkedIn PDF Analyzer** (`POST /api/profile/import-pdf`): drag-drop / upload a LinkedIn-exported PDF → `pdfplumber` extracts text → Claude parses into structured profile (name, headline, location, bio, skills, preferred roles/locations, full resume narrative). Auto-fills the entire Profile form. 8 MB cap.
 - ✅ **Full data export** (`GET /api/export`): one click downloads `careeros-export-YYYY-MM-DD.json` with everything CareerOS knows about you (user, profile, all saved jobs + statuses + notes, stats).

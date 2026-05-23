@@ -265,6 +265,21 @@ function scoreColor(s) {
   return s >= 80 ? 'var(--emerald)' : s >= 60 ? 'var(--amber)' : s >= 40 ? 'var(--purple)' : 'var(--rose)';
 }
 
+function LogoImg({ src, company, size = 40 }) {
+  const [failed, setFailed] = React.useState(false);
+  if (!src || failed) {
+    return <>{(company?.[0] || '?').toUpperCase()}</>;
+  }
+  return (
+    <img
+      src={src}
+      alt={company}
+      onError={() => setFailed(true)}
+      style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: 3 }}
+    />
+  );
+}
+
 function JobCard({ job, saved, onSave, onOpen, score }) {
   const col = score ? scoreColor(score.score) : null;
   const hasRealLocation = job.location && job.location !== '—' && job.location.toLowerCase() !== 'remote';
@@ -277,7 +292,7 @@ function JobCard({ job, saved, onSave, onOpen, score }) {
       )}
       <div className="job-card-header" style={score ? { paddingRight: 60 } : undefined}>
         <div className="job-logo">
-          {job.company_logo ? <img src={job.company_logo} alt={job.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (job.company?.[0] || '?').toUpperCase() })); }} /> : (job.company?.[0] || '?').toUpperCase()}
+          <LogoImg src={job.company_logo} company={job.company} />
         </div>
         <div className="job-header-info">
           <div className="job-title" onClick={onOpen} style={{ cursor: 'pointer' }} data-testid={`job-title-${job.external_id}`}>{job.title}</div>
@@ -376,9 +391,7 @@ function JobModal({ job, onClose, onSave, alreadySaved }) {
         <div className="modal-header">
           <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 8 }}>
             <div className="job-logo" style={{ width: 52, height: 52, fontSize: 18 }}>
-              {job.company_logo
-                ? <img src={job.company_logo} alt={job.company} onError={(e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { textContent: (job.company?.[0] || '?').toUpperCase() })); }} />
-                : (job.company?.[0] || '?').toUpperCase()}
+              <LogoImg src={job.company_logo} company={job.company} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="modal-title" data-testid="job-modal-title">{job.title}</div>

@@ -370,6 +370,7 @@ async def register_from_pdf(
         "user": fresh,
         "updated_keys": list(profile_update.keys()),
         "raw_text_chars": len(text),
+        "profile_parsed": bool(profile_update),
     }
 
 
