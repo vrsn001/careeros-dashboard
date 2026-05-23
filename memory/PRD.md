@@ -34,6 +34,10 @@
 - ✅ All endpoints prefixed `/api`, all interactive elements tagged with `data-testid`
 - ✅ Pre-seeded demo user (demo@careeros.io / demo1234) with full profile for instant AI testing
 
+## What's implemented (May 23, 2026 — P0 iteration)
+- ✅ **Bulk AI Rank** (`POST /api/ai/rank`): one Claude call scores up to 60 jobs at once; UI shows sparkle+score badge per card + colored one-line reason + "SORT BY SCORE" toggle that puts highest-match roles first
+- ✅ **Wellfound URL import** (`POST /api/jobs/import`): paste a wellfound.com/jobs/… URL → parses `__NEXT_DATA__` → preview → save in one click. DataDome blocks bubble up as a clear error with "Open Original" fallback.
+
 ## Backlog / next iterations
 ### P0
 - LinkedIn profile import via Apify (token-gated; existing /app/legacy + /app/app had this — bring it back behind an "Import from LinkedIn" button)

@@ -239,7 +239,7 @@ function JobCard({ job, saved, onSave, onOpen, score }) {
         {!score && <span className={`job-source-badge src-${job.source}`}>{job.source === 'ycombinator' ? 'YC' : job.source === 'hackernews' ? 'HN' : job.source === 'remoteok' ? 'RMTOK' : 'WLFND'}</span>}
       </div>
       {score && (
-        <div style={{ fontSize: 11, color: col, fontStyle: 'italic', marginBottom: 10, paddingLeft: 4, borderLeft: `2px solid ${col}`, paddingLeft: 8 }} data-testid={`job-score-reason-${job.external_id}`}>
+        <div style={{ fontSize: 11, color: col, fontStyle: 'italic', marginBottom: 10, borderLeft: `2px solid ${col}`, paddingLeft: 8 }} data-testid={`job-score-reason-${job.external_id}`}>
           {score.one_liner}
         </div>
       )}
