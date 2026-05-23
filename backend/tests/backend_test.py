@@ -6,8 +6,8 @@ import requests
 import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://4123b9c7-d40e-4e7e-a908-637911ca54c8.preview.emergentagent.com").rstrip("/")
-DEMO_EMAIL = "demo@careeros.io"
-DEMO_PASSWORD = "demo1234"
+DEMO_EMAIL = os.environ.get("CAREEROS_DEMO_EMAIL", "demo@careeros.io")
+DEMO_PASSWORD = os.environ.get("CAREEROS_DEMO_PASSWORD", "demo1234")
 
 
 # ---------- Fixtures ----------

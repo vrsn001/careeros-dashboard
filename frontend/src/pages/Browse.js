@@ -53,7 +53,10 @@ export default function Browse() {
     try {
       const { data } = await api.get('/saved-jobs');
       setSavedIds(new Set((data.items || []).map((j) => j.external_id)));
-    } catch { /* ignore */ }
+    } catch (e) {
+      // Non-fatal: the user can still browse without seeing saved badges.
+      console.warn('[Browse] could not load saved jobs:', e);
+    }
   }
 
   useEffect(() => {

@@ -24,7 +24,11 @@ export default function Profile() {
     try {
       const { data } = await api.get('/profile');
       setProfile({ ...EMPTY, ...data });
-    } catch (e) { /* ignore */ } finally { setLoading(false); }
+    } catch (e) {
+      console.warn('[Profile] could not load profile:', e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, []);
