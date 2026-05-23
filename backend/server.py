@@ -35,8 +35,16 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = "HS256"
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@careeros.io")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin1234")
+ADMIN_NAME = os.environ.get("ADMIN_NAME", "Admin")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "*")
+INVITE_ONLY = os.environ.get("INVITE_ONLY", "false").lower() == "true"
+SEED_INVITE_COUNT = int(os.environ.get("SEED_INVITE_COUNT", "20"))
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+
+# Per-user daily quotas. Demo gets a tiny budget; everyone else is generous.
+DEFAULT_QUOTA = {"ai_match": 30, "ai_rank": 5, "ai_cover": 10, "pdf_import": 3}
+DEMO_QUOTA = {"ai_match": 3, "ai_rank": 1, "ai_cover": 1, "pdf_import": 1}
+ADMIN_QUOTA = {"ai_match": 999, "ai_rank": 99, "ai_cover": 99, "pdf_import": 99}
 
 # ---------------------------------------------------------------- DB --------
 mongo = AsyncIOMotorClient(MONGO_URL)
@@ -45,7 +53,7 @@ db = mongo[DB_NAME]
 # ---------------------------------------------------------------- App ------
 app = FastAPI(title="CareerOS API", version="1.0.0")
 
-_origins = ["*"] if FRONTEND_URL == "*" else [FRONTEND_URL]
+_origins = ["*"] if FRONTEND_URL == "*" else [u.strip() for u in FRONTEND_URL.split(",") if u.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
@@ -104,11 +112,76 @@ async def get_current_user(request: Request) -> dict:
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 
+async def get_admin_user(user: CurrentUser) -> dict:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="admin only, friend")
+    return user
+
+
+CurrentAdmin = Annotated[dict, Depends(get_admin_user)]
+
+
+# ---------- Invite helpers ----------
+import secrets as _secrets
+
+
+def _gen_invite_code() -> str:
+    """Human-readable invite code like CRE-9F2K-7M3X."""
+    alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+    parts = ["".join(_secrets.choice(alphabet) for _ in range(4)) for _ in range(2)]
+    return f"CRE-{parts[0]}-{parts[1]}"
+
+
+def _quota_for(user: dict) -> dict:
+    if user.get("role") == "admin":
+        return ADMIN_QUOTA
+    if user.get("email") == "demo@careeros.io":
+        return DEMO_QUOTA
+    return DEFAULT_QUOTA
+
+
+def _today_key() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+async def check_quota_and_consume(user: dict, kind: str) -> tuple[int, int]:
+    """
+    Check if user has remaining quota for `kind`. If yes, increment and return (used, limit).
+    If no, raise 429.
+    """
+    limit = _quota_for(user).get(kind, 0)
+    today = _today_key()
+    usage = user.get("usage") or {}
+    if usage.get("date") != today:
+        usage = {"date": today}
+    used = int(usage.get(kind, 0))
+    if used >= limit:
+        raise HTTPException(
+            status_code=429,
+            detail=f"daily {kind} limit hit ({used}/{limit}). reset at 00:00 UTC.",
+        )
+    usage[kind] = used + 1
+    usage["date"] = today
+    await db.users.update_one(
+        {"_id": ObjectId(user["_id"])},
+        {"$set": {"usage": usage}},
+    )
+    return used + 1, limit
+
+
 # ---------------------------------------------------------------- Models ----
 class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
     name: Optional[str] = None
+    invite_code: Optional[str] = None
+
+
+class InviteCreateIn(BaseModel):
+    type: str = "code"  # 'code' | 'email'
+    email: Optional[EmailStr] = None
+    count: int = 1
+    note: Optional[str] = None
 
 
 class LoginIn(BaseModel):
@@ -180,30 +253,60 @@ async def _startup():
         await db.saved_jobs.create_index([("user_id", 1), ("external_id", 1)], unique=True)
         await db.scrape_cache.create_index("key", unique=True)
         await db.scrape_cache.create_index("expires_at", expireAfterSeconds=0)
+        await db.invites.create_index("code", unique=True)
+        await db.invites.create_index("email", sparse=True)
     except Exception as e:
         log.warning("Index creation: %s", e)
 
-    # Seed admin
-    existing = await db.users.find_one({"email": ADMIN_EMAIL})
+    # Remove any stale admin under the old email
+    OLD_ADMIN = "admin@careeros.io"
+    if ADMIN_EMAIL.lower() != OLD_ADMIN:
+        try:
+            await db.users.delete_one({"email": OLD_ADMIN})
+        except Exception:
+            pass
+
+    admin_email = ADMIN_EMAIL.lower()
+    existing = await db.users.find_one({"email": admin_email})
     if existing is None:
         await db.users.insert_one({
-            "email": ADMIN_EMAIL,
+            "email": admin_email,
             "password_hash": hash_password(ADMIN_PASSWORD),
-            "name": "Admin",
+            "name": ADMIN_NAME,
             "role": "admin",
             "created_at": datetime.now(timezone.utc),
-            "profile": {},
+            "profile": {"name": ADMIN_NAME},
         })
-        log.info("Seeded admin user %s", ADMIN_EMAIL)
+        log.info("Seeded admin user %s", admin_email)
     else:
-        # If admin password changed, sync
+        # Sync admin password if changed, and ensure role=admin
+        updates = {"role": "admin", "name": ADMIN_NAME}
         if not verify_password(ADMIN_PASSWORD, existing["password_hash"]):
-            await db.users.update_one(
-                {"email": ADMIN_EMAIL},
-                {"$set": {"password_hash": hash_password(ADMIN_PASSWORD)}},
-            )
+            updates["password_hash"] = hash_password(ADMIN_PASSWORD)
+        await db.users.update_one({"email": admin_email}, {"$set": updates})
 
-    # Seed demo user
+    # Seed N general-purpose invite codes (idempotent)
+    admin = await db.users.find_one({"email": admin_email})
+    existing_codes = await db.invites.count_documents({"type": "code", "used_by": None})
+    if existing_codes < SEED_INVITE_COUNT and admin:
+        to_create = SEED_INVITE_COUNT - existing_codes
+        docs = []
+        for _ in range(to_create):
+            docs.append({
+                "type": "code",
+                "code": _gen_invite_code(),
+                "email": None,
+                "note": "seeded",
+                "created_by": str(admin["_id"]),
+                "created_at": datetime.now(timezone.utc),
+                "used_by": None,
+                "used_at": None,
+            })
+        if docs:
+            await db.invites.insert_many(docs)
+            log.info("Seeded %d invite codes", len(docs))
+
+    # Demo user (kept, but tightly quota'd in code)
     demo_email = "demo@careeros.io"
     demo = await db.users.find_one({"email": demo_email})
     if demo is None:
@@ -240,11 +343,53 @@ async def health():
 
 
 # ---------------------------------------------------------------- Auth API
+async def _redeem_invite(email_norm: str, invite_code: Optional[str]) -> dict:
+    """
+    Validate the invite for `email_norm`. Returns the invite doc (to mark as used after user creation).
+    Raises HTTPException on failure. If INVITE_ONLY=false, returns {} (open registration).
+    """
+    if not INVITE_ONLY:
+        return {}
+
+    # Email-bound invite takes precedence (no code required)
+    email_invite = await db.invites.find_one({
+        "type": "email", "email": email_norm, "used_by": None,
+    })
+    if email_invite:
+        return email_invite
+
+    if not invite_code:
+        raise HTTPException(status_code=403, detail="invite-only. ask vrsn001 for a code.")
+
+    code_norm = invite_code.strip().upper()
+    code_invite = await db.invites.find_one({"code": code_norm, "used_by": None})
+    if not code_invite:
+        raise HTTPException(status_code=403, detail="invite code invalid or already redeemed.")
+    if code_invite.get("type") == "email" and code_invite.get("email") and code_invite["email"] != email_norm:
+        raise HTTPException(status_code=403, detail="this invite was issued to a different email.")
+    return code_invite
+
+
+async def _mark_invite_used(invite: dict, user_id):
+    if not invite or not invite.get("_id"):
+        return
+    await db.invites.update_one(
+        {"_id": invite["_id"]},
+        {"$set": {
+            "used_by": str(user_id),
+            "used_at": datetime.now(timezone.utc),
+        }},
+    )
+
+
 @app.post("/api/auth/register", response_model=AuthOut)
 async def register(body: RegisterIn):
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    invite = await _redeem_invite(email, body.invite_code)
+
     doc = {
         "email": email,
         "password_hash": hash_password(body.password),
@@ -252,8 +397,10 @@ async def register(body: RegisterIn):
         "role": "user",
         "created_at": datetime.now(timezone.utc),
         "profile": {"name": body.name or email.split("@")[0]},
+        "invited_by": invite.get("created_by") if invite else None,
     }
     res = await db.users.insert_one(doc)
+    await _mark_invite_used(invite, res.inserted_id)
     token = create_access_token(res.inserted_id, email)
     doc["_id"] = str(res.inserted_id)
     doc.pop("password_hash", None)
@@ -277,6 +424,7 @@ async def register_from_pdf(
     pdf: UploadFile = File(..., description="LinkedIn PDF"),
     email: str = Query(..., description="Email for the new account"),
     password: str = Query(..., min_length=6, description="Password ≥6 chars"),
+    invite_code: Optional[str] = Query(None, description="Invite code (required if INVITE_ONLY)"),
 ):
     """
     'Continue with LinkedIn' onboarding: in one shot, create an account AND
@@ -289,6 +437,8 @@ async def register_from_pdf(
         raise HTTPException(status_code=400, detail="Password must be 6+ chars")
     if await db.users.find_one({"email": email_norm}):
         raise HTTPException(status_code=400, detail="Email already registered. Try logging in.")
+
+    invite = await _redeem_invite(email_norm, invite_code)
 
     content_type = (pdf.content_type or "").lower()
     if "pdf" not in content_type and not (pdf.filename or "").lower().endswith(".pdf"):
@@ -318,9 +468,11 @@ async def register_from_pdf(
         "role": "user",
         "created_at": datetime.now(timezone.utc),
         "profile": {},
+        "invited_by": invite.get("created_by") if invite else None,
     }
     res = await db.users.insert_one(doc)
     user_id = res.inserted_id
+    await _mark_invite_used(invite, user_id)
 
     trimmed = text[:25000]
     system = (
@@ -593,6 +745,7 @@ async def ai_match(body: MatchIn, user: CurrentUser):
     profile = _profile_blob(user)
     if not profile.strip():
         raise HTTPException(status_code=400, detail="Add a profile/resume first")
+    used, limit = await check_quota_and_consume(user, "ai_match")
     job = _job_blob(body.job)
     system = (
         "You are a senior tech recruiter scoring how well a candidate fits a job. "
@@ -619,6 +772,7 @@ async def ai_cover_letter(body: CoverLetterIn, user: CurrentUser):
     profile = _profile_blob(user)
     if not profile.strip():
         raise HTTPException(status_code=400, detail="Add a profile/resume first")
+    used, limit = await check_quota_and_consume(user, "ai_cover")
     job = _job_blob(body.job)
     tone = (body.tone or "professional").lower()
     system = (
@@ -671,6 +825,7 @@ async def ai_rank(body: RankIn, user: CurrentUser):
         raise HTTPException(status_code=400, detail="Add a profile/resume first")
     if not body.jobs:
         return {"scores": {}}
+    used, limit = await check_quota_and_consume(user, "ai_rank")
 
     # Cap at 60 jobs per call to keep latency + token cost sane
     jobs = body.jobs[:60]
@@ -836,6 +991,7 @@ async def import_profile_pdf(
     Upload a LinkedIn-exported PDF → extract text → ask Claude to structure it
     into the user's profile. Saves to user.profile.
     """
+    await check_quota_and_consume(user, "pdf_import")
     content_type = (pdf.content_type or "").lower()
     if "pdf" not in content_type and not (pdf.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="bestie, that ain't a PDF")
@@ -942,6 +1098,104 @@ async def export_my_data(user: CurrentUser):
         },
     }
 
+
+
+# ---------- Usage / quota ----------
+@app.get("/api/usage")
+async def get_usage(user: CurrentUser):
+    """Return today's usage counts + the user's daily quota limits."""
+    today = _today_key()
+    fresh = await db.users.find_one({"_id": ObjectId(user["_id"])}) or {}
+    usage = fresh.get("usage") or {}
+    if usage.get("date") != today:
+        usage = {"date": today}
+    limits = _quota_for(fresh)
+    return {
+        "date": today,
+        "limits": limits,
+        "used": {k: int(usage.get(k, 0)) for k in limits.keys()},
+        "remaining": {k: max(0, limits[k] - int(usage.get(k, 0))) for k in limits.keys()},
+        "role": fresh.get("role", "user"),
+    }
+
+
+# ---------- Account ----------
+@app.delete("/api/account")
+async def delete_my_account(user: CurrentUser):
+    """GDPR-style account deletion. Wipes user + their saved jobs."""
+    uid = user["_id"]
+    if user.get("email") in (ADMIN_EMAIL.lower(), "demo@careeros.io"):
+        raise HTTPException(status_code=403, detail="this account can't self-delete. ask vrsn001.")
+    deleted_jobs = (await db.saved_jobs.delete_many({"user_id": uid})).deleted_count
+    deleted_user = (await db.users.delete_one({"_id": ObjectId(uid)})).deleted_count
+    return {"deleted": {"user": deleted_user, "saved_jobs": deleted_jobs}}
+
+
+# ---------- Admin: invites ----------
+@app.get("/api/admin/invites")
+async def admin_list_invites(admin: CurrentAdmin):
+    items = []
+    async for inv in db.invites.find().sort("created_at", -1):
+        items.append(_serialize(inv))
+    return {"items": items, "total": len(items)}
+
+
+@app.post("/api/admin/invites")
+async def admin_create_invites(body: InviteCreateIn, admin: CurrentAdmin):
+    if body.type not in ("code", "email"):
+        raise HTTPException(status_code=400, detail="type must be 'code' or 'email'")
+    created: list[dict] = []
+    if body.type == "email":
+        if not body.email:
+            raise HTTPException(status_code=400, detail="email required for type=email")
+        email_norm = str(body.email).lower().strip()
+        existing = await db.invites.find_one({"type": "email", "email": email_norm, "used_by": None})
+        if existing:
+            raise HTTPException(status_code=400, detail="active invite already exists for this email")
+        doc = {
+            "type": "email", "code": _gen_invite_code(), "email": email_norm, "note": body.note,
+            "created_by": admin["_id"], "created_at": datetime.now(timezone.utc),
+            "used_by": None, "used_at": None,
+        }
+        res = await db.invites.insert_one(doc)
+        doc["_id"] = str(res.inserted_id)
+        created.append(_serialize(doc))
+    else:
+        n = max(1, min(50, body.count))
+        for _ in range(n):
+            doc = {
+                "type": "code", "code": _gen_invite_code(), "email": None, "note": body.note,
+                "created_by": admin["_id"], "created_at": datetime.now(timezone.utc),
+                "used_by": None, "used_at": None,
+            }
+            res = await db.invites.insert_one(doc)
+            doc["_id"] = str(res.inserted_id)
+            created.append(_serialize(doc))
+    return {"created": created, "count": len(created)}
+
+
+@app.delete("/api/admin/invites/{invite_id}")
+async def admin_revoke_invite(invite_id: str, admin: CurrentAdmin):
+    try:
+        oid = ObjectId(invite_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid id")
+    inv = await db.invites.find_one({"_id": oid})
+    if not inv:
+        raise HTTPException(status_code=404, detail="not found")
+    if inv.get("used_by"):
+        raise HTTPException(status_code=400, detail="already used; can't revoke")
+    await db.invites.delete_one({"_id": oid})
+    return {"revoked": invite_id}
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(admin: CurrentAdmin):
+    items = []
+    async for u in db.users.find().sort("created_at", -1):
+        u.pop("password_hash", None)
+        items.append(_serialize(u))
+    return {"items": items, "total": len(items)}
 
 
 # ---------------------------------------------------------------- Root ----
