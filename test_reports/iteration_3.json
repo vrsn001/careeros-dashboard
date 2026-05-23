@@ -1,0 +1,32 @@
+{
+  "summary": "Pure regression after code-quality refactors (empty-catch fixes, AuthContext useMemo, env-var demo creds, duplicate paddingLeft removal). Backend: 21/21 pytest cases pass. Frontend: full happy-path e2e (landing → /auth → demo login → browse 75 jobs → search 'python' 26 → open modal → AI match → AI cover letter → close → import modal open/close → save a job → saved → profile edit+save → analytics → AI RANK ALL → cross-nav → logout) completed with ZERO console errors. AI RANK ALL produced 60 score badges (data-testid='job-score-{ext_id}') in ~51s; SORT BY SCORE auto-engaged; scores correctly descending (82, 81, 80, 79, 78…); first card has max score 82. AuthContext useMemo did not introduce any re-render loops — cross-navigation Browse↔Saved↔Profile↔Analytics is smooth. Profile.load success-path produced no console.warn (graceful-failure log only fires on actual error, as intended).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "AuthContext.js useMemo deps array correctly includes [user, loading, login, register, logout, refresh]; all five action functions are wrapped in useCallback with [] deps, so the memoized value only changes when user/loading change — exactly the desired behavior. Re-render storm risk: none.",
+    "Browse.js fetchSaved catch now logs `console.warn('[Browse] could not load saved jobs:', e)` — graceful + observable. Verified no warn fires on happy path (API returned 200).",
+    "Profile.js load catch now logs `console.warn('[Profile] could not load profile:', e)` — same pattern, verified silent on happy path.",
+    "JobCard score one_liner inline style: confirmed only a single `paddingLeft: 8` key remains (duplicate gone).",
+    "React Router v6 → v7 future-flag warnings (v7_startTransition, v7_relativeSplatPath) are noisy in console (~22 occurrences across navigation). Not introduced by this iteration, but worth a one-liner BrowserRouter `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}` to silence — purely cosmetic."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100% of tested flows"},
+  "test_credentials": "demo@careeros.io / demo1234 (pre-seeded, has profile with skills+resume_text — required for /api/ai/rank, /api/ai/match, /api/ai/cover-letter).",
+  "seed_data_creation": "Transient: 1 TEST_*@example.com register (no cleanup; harmless) + 1 saved-job CRUD round-trip (auto-deleted in same test).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend test suite (21 cases) at /app/backend/tests/backend_test.py is the regression source of truth. DEMO_EMAIL/DEMO_PASSWORD are now env-overridable via CAREEROS_DEMO_EMAIL / CAREEROS_DEMO_PASSWORD with safe defaults. To check AI RANK score badges in Playwright, use page.evaluate with `[data-testid^=\"job-score-\"]:not([data-testid^=\"job-score-reason-\"])` — confirmed working. AI RANK on demo profile w/ 75-job feed takes ~50s (P0 cost is the Claude call; backend reports 60-job batch). Frontend has NO console errors on any tested path; only React Router v6→v7 future-flag warnings appear.",
+  "rca of the issue": "No issues found. All four refactor targets verified intact: (1) empty-catch fixes log via console.warn only on failure paths; (2) AuthContext useMemo prevents identity churn but does not break refresh/login/logout closures; (3) env-var demo creds resolve to the seeded demo user; (4) JobCard score reason renders with single paddingLeft."
+}
