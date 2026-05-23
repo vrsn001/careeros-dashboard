@@ -1,0 +1,341 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Search, RefreshCw, ExternalLink, BookmarkPlus, Sparkles, MapPin, Briefcase, Wallet, X, Copy, Globe,
+} from 'lucide-react';
+import api, { formatApiError } from '../api';
+import { useToast } from '../Toast';
+
+const ALL_SOURCES = [
+  { id: 'remoteok', label: 'RemoteOK', color: 'var(--cyan)' },
+  { id: 'ycombinator', label: 'Y Combinator', color: '#ff8c42' },
+  { id: 'hackernews', label: "HN Who's Hiring", color: '#ff6600' },
+  { id: 'wellfound', label: 'Wellfound', color: 'var(--purple)' },
+];
+
+export default function Browse() {
+  const toast = useToast();
+  const [query, setQuery] = useState('');
+  const [activeSources, setActiveSources] = useState(ALL_SOURCES.map((s) => s.id));
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeJob, setActiveJob] = useState(null);
+  const [savedIds, setSavedIds] = useState(new Set());
+
+  async function fetchJobs(opts = {}) {
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams();
+      if (query) params.set('q', query);
+      if (activeSources.length && activeSources.length < ALL_SOURCES.length) {
+        params.set('sources', activeSources.join(','));
+      }
+      params.set('per_source', '25');
+      if (opts.refresh) params.set('refresh', 'true');
+      const { data } = await api.get(`/jobs/search?${params.toString()}`);
+      setData(data);
+    } catch (e) {
+      setError(formatApiError(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchSaved() {
+    try {
+      const { data } = await api.get('/saved-jobs');
+      setSavedIds(new Set((data.items || []).map((j) => j.external_id)));
+    } catch { /* ignore */ }
+  }
+
+  useEffect(() => {
+    fetchJobs();
+    fetchSaved();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggleSource(id) {
+    setActiveSources((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
+  }
+
+  const jobs = data?.jobs || [];
+  const visibleJobs = useMemo(() => jobs, [jobs]);
+
+  async function saveJob(job, status = 'saved') {
+    try {
+      await api.post('/saved-jobs', { job, status });
+      setSavedIds((s) => new Set([...s, job.external_id]));
+      toast(`Saved · ${job.title.slice(0, 30)}…`, 'success');
+    } catch (e) {
+      toast(formatApiError(e), 'error');
+    }
+  }
+
+  return (
+    <section className="content-section" data-testid="browse-section">
+      <div className="section-header">
+        <div>
+          <h1 className="section-title">Browse Jobs</h1>
+          <p className="section-subtitle">// live feed from {ALL_SOURCES.length} sources · 10 min cache</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="toolbar-action" onClick={() => fetchJobs({ refresh: true })} disabled={loading} data-testid="browse-refresh-btn">
+            <RefreshCw size={12} /> {loading ? 'REFRESHING…' : 'REFRESH'}
+          </button>
+        </div>
+      </div>
+
+      <div className="toolbar">
+        <div className="search-bar" data-testid="browse-search-bar">
+          <Search size={14} />
+          <input
+            type="text"
+            placeholder="search role, company, stack… (e.g. 'react', 'python', 'staff engineer')"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && fetchJobs()}
+            data-testid="browse-search-input"
+          />
+        </div>
+        <div className="filter-pills" data-testid="browse-source-filters">
+          {ALL_SOURCES.map((s) => (
+            <button
+              key={s.id}
+              className={`filter-pill ${activeSources.includes(s.id) ? 'active' : ''}`}
+              onClick={() => toggleSource(s.id)}
+              data-testid={`browse-source-${s.id}`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <button className="btn-primary" style={{ padding: '8px 18px', fontSize: 11 }} onClick={() => fetchJobs()} data-testid="browse-search-submit-btn">
+          SEARCH
+        </button>
+      </div>
+
+      {data?.status && (
+        <div className="source-status" data-testid="browse-source-status">
+          {ALL_SOURCES.map((s) => {
+            const st = data.status[s.id];
+            if (!st) return null;
+            const count = data.by_source?.[s.id]?.length || 0;
+            return (
+              <span key={s.id} className="source-chip" data-testid={`browse-status-${s.id}`}>
+                <span className={`dot ${st === 'ok' ? 'ok' : st === 'empty' ? 'empty' : 'error'}`} />
+                {s.label} — {st === 'ok' ? `${count} roles` : st === 'empty' ? 'no roles' : 'limited / blocked'}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {error && <div className="empty-state" data-testid="browse-error" style={{ color: 'var(--rose)' }}>{error}</div>}
+
+      {loading && !data ? (
+        <div className="loading-grid" data-testid="browse-loading">
+          {[...Array(8)].map((_, i) => <div key={i} className="skeleton" />)}
+        </div>
+      ) : visibleJobs.length === 0 ? (
+        <div className="empty-state" data-testid="browse-empty">
+          <Briefcase size={40} />
+          <div>No roles found.<br />Try clearing your search or changing sources.</div>
+        </div>
+      ) : (
+        <div className="jobs-grid" data-testid="browse-jobs-grid">
+          {visibleJobs.map((job) => (
+            <JobCard
+              key={job.external_id}
+              job={job}
+              saved={savedIds.has(job.external_id)}
+              onSave={() => saveJob(job)}
+              onOpen={() => setActiveJob(job)}
+            />
+          ))}
+        </div>
+      )}
+
+      {activeJob && <JobModal job={activeJob} onClose={() => setActiveJob(null)} onSave={(s) => saveJob(activeJob, s)} alreadySaved={savedIds.has(activeJob.external_id)} />}
+    </section>
+  );
+}
+
+function JobCard({ job, saved, onSave, onOpen }) {
+  return (
+    <div className="job-card" data-testid={`job-card-${job.external_id}`}>
+      <div className="job-card-header">
+        <div className="job-logo">
+          {job.company_logo ? <img src={job.company_logo} alt="" onError={(e) => { e.target.style.display = 'none'; }} /> : (job.company?.[0] || '?').toUpperCase()}
+        </div>
+        <div className="job-header-info">
+          <div className="job-title" onClick={onOpen} style={{ cursor: 'pointer' }} data-testid={`job-title-${job.external_id}`}>{job.title}</div>
+          <div className="job-company">{job.company}</div>
+        </div>
+        <span className={`job-source-badge src-${job.source}`}>{job.source === 'ycombinator' ? 'YC' : job.source === 'hackernews' ? 'HN' : job.source === 'remoteok' ? 'RMTOK' : 'WLFND'}</span>
+      </div>
+      <div className="job-tags">
+        {(job.tags || []).slice(0, 5).map((t, i) => <span key={i} className="job-tag">{t}</span>)}
+      </div>
+      <div className="job-meta">
+        <span className="job-meta-item"><MapPin size={11} />{job.location || '—'}</span>
+        {job.remote && <span className="job-meta-item"><Globe size={11} />Remote</span>}
+        {job.salary && <span className="job-meta-item job-salary"><Wallet size={11} />{job.salary}</span>}
+      </div>
+      {job.description && <div className="job-description">{job.description}</div>}
+      <div className="job-actions">
+        <button className="job-btn job-btn-primary" onClick={onOpen} data-testid={`job-open-${job.external_id}`}>
+          <Sparkles size={12} /> Details + AI
+        </button>
+        <button className="job-btn job-btn-ghost" onClick={onSave} disabled={saved} data-testid={`job-save-${job.external_id}`}>
+          <BookmarkPlus size={12} /> {saved ? 'Saved' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function JobModal({ job, onClose, onSave, alreadySaved }) {
+  const toast = useToast();
+  const [match, setMatch] = useState(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchError, setMatchError] = useState('');
+  const [cover, setCover] = useState(null);
+  const [coverLoading, setCoverLoading] = useState(false);
+  const [coverError, setCoverError] = useState('');
+  const [tone, setTone] = useState('professional');
+
+  async function runMatch() {
+    setMatchLoading(true);
+    setMatchError('');
+    setMatch(null);
+    try {
+      const { data } = await api.post('/ai/match', { job });
+      setMatch(data);
+    } catch (e) {
+      setMatchError(formatApiError(e));
+    } finally {
+      setMatchLoading(false);
+    }
+  }
+
+  async function runCover() {
+    setCoverLoading(true);
+    setCoverError('');
+    setCover(null);
+    try {
+      const { data } = await api.post('/ai/cover-letter', { job, tone });
+      setCover(data);
+    } catch (e) {
+      setCoverError(formatApiError(e));
+    } finally {
+      setCoverLoading(false);
+    }
+  }
+
+  function copyCover() {
+    if (!cover?.cover_letter) return;
+    navigator.clipboard.writeText(cover.cover_letter).then(() => toast('Cover letter copied', 'success'));
+  }
+
+  const scoreColor = (s) => s >= 80 ? 'var(--emerald)' : s >= 60 ? 'var(--amber)' : s >= 40 ? 'var(--purple)' : 'var(--rose)';
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} data-testid="job-modal">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Close" data-testid="job-modal-close">
+          <X size={18} />
+        </button>
+        <div className="modal-header">
+          <div className="modal-title" data-testid="job-modal-title">{job.title}</div>
+          <div className="modal-sub">
+            {job.company} · <span className={`job-source-badge src-${job.source}`} style={{ marginLeft: 6 }}>{job.source}</span>
+            {job.location && <> · {job.location}</>}
+            {job.salary && <> · <span style={{ color: 'var(--emerald)' }}>{job.salary}</span></>}
+          </div>
+        </div>
+
+        <div className="job-tags">{(job.tags || []).map((t, i) => <span key={i} className="job-tag">{t}</span>)}</div>
+
+        {job.description && (
+          <div style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', maxHeight: 240, overflowY: 'auto', padding: 12, background: 'var(--bg-200)', borderRadius: 4, border: '1px solid var(--border-dim)' }} data-testid="job-modal-description">
+            {job.description}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          {job.apply_url && (
+            <a className="btn-primary" href={job.apply_url} target="_blank" rel="noopener noreferrer" data-testid="job-modal-apply-btn">
+              <ExternalLink size={12} /> Open original
+            </a>
+          )}
+          <button className="btn-secondary" onClick={() => onSave('saved')} disabled={alreadySaved} data-testid="job-modal-save-btn">
+            <BookmarkPlus size={12} /> {alreadySaved ? 'Saved' : 'Save'}
+          </button>
+          <button className="btn-secondary" onClick={() => onSave('applied')} data-testid="job-modal-mark-applied-btn">
+            Mark as applied
+          </button>
+        </div>
+
+        {/* AI MATCH */}
+        <div style={{ marginTop: 22, borderTop: '1px solid var(--border-dim)', paddingTop: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>AI Match Score</h3>
+            <button className="toolbar-action" onClick={runMatch} disabled={matchLoading} data-testid="job-modal-match-btn">
+              <Sparkles size={12} /> {matchLoading ? 'SCORING…' : match ? 'RE-RUN' : 'RUN MATCH'}
+            </button>
+          </div>
+          {matchError && <div style={{ color: 'var(--rose)', fontSize: 12, fontFamily: 'var(--font-mono)' }} data-testid="job-modal-match-error">{matchError}</div>}
+          {match && (
+            <div className="match-result" data-testid="job-modal-match-result">
+              <div className="match-row">
+                <div className="match-score-circle" style={{ background: `color-mix(in srgb, ${scoreColor(match.score)} 15%, transparent)`, border: `2px solid ${scoreColor(match.score)}`, color: scoreColor(match.score) }}>
+                  <span className="num">{match.score}</span>
+                  <span className="label">SCORE</span>
+                </div>
+                <div>
+                  <div className="match-verdict" style={{ color: scoreColor(match.score) }}>{match.verdict}</div>
+                  <div className="match-narrative">{match.why_fits}</div>
+                </div>
+              </div>
+              {match.gaps?.length > 0 && (
+                <>
+                  <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 6 }}>GAPS TO CLOSE</div>
+                  <ul className="match-gaps">{match.gaps.map((g, i) => <li key={i}>{g}</li>)}</ul>
+                </>
+              )}
+              {match.next_steps && <div className="match-next">→ {match.next_steps}</div>}
+            </div>
+          )}
+        </div>
+
+        {/* AI COVER LETTER */}
+        <div style={{ marginTop: 22, borderTop: '1px solid var(--border-dim)', paddingTop: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600 }}>Cover Letter Draft</h3>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <select className="form-select" style={{ padding: '6px 10px', fontSize: 11, width: 'auto' }} value={tone} onChange={(e) => setTone(e.target.value)} data-testid="job-modal-cover-tone">
+                <option value="professional">Professional</option>
+                <option value="enthusiastic">Enthusiastic</option>
+                <option value="casual">Casual</option>
+              </select>
+              <button className="toolbar-action" onClick={runCover} disabled={coverLoading} data-testid="job-modal-cover-btn">
+                <Sparkles size={12} /> {coverLoading ? 'DRAFTING…' : cover ? 'RE-DRAFT' : 'DRAFT LETTER'}
+              </button>
+            </div>
+          </div>
+          {coverError && <div style={{ color: 'var(--rose)', fontSize: 12, fontFamily: 'var(--font-mono)' }} data-testid="job-modal-cover-error">{coverError}</div>}
+          {cover && (
+            <div className="cover-output" data-testid="job-modal-cover-output">
+              {cover.subject && <div className="cover-subject">subject: {cover.subject}</div>}
+              <div className="cover-body">{cover.cover_letter}</div>
+              <div className="cover-actions">
+                <button className="btn-secondary" onClick={copyCover} data-testid="job-modal-cover-copy-btn"><Copy size={12} /> Copy</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
